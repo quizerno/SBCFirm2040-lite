@@ -1,0 +1,18 @@
+Steps to deploy to RPi Pico
+1. Hold left button and press right button
+2. Mount the USB drive that appeared
+3. Copy the UF2 file to the drive
+4. Pico will automatically apply the firmware update and restart
+5. lsusb to get list of attached devices
+    ex. Bus 005 Device 032: ID 0a7b:d000
+6. lsusb -v -s BUS:DEV to get list
+    ex. lsusb -v -s 005:032 # device 32 on bus 5
+
+Helpful Links:
+https://xboxdevwiki.net/Xbox_Input_Devices#Steel_Battalion_Controller
+https://github.com/xemu-project/xemu/blob/9f38015940cb9bf71fed9f1c3618802c6527c598/hw/xbox/xid-steel-battalion.c
+https://www.raspberrypi.com/documentation/pico-sdk/
+https://www.raspberrypi.com/documentation/microcontrollers/c_sdk.html
+
+https://github.com/wiredopposite/tusb_gamepad_example_pico-sdk/
+https://github.com/wiredopposite/tusb_gamepad/
