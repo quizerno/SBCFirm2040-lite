@@ -14,3 +14,8 @@ make
 ```
 
 Once that's done, connect your RP2040 to your PC in Download mode, and copy SteelBattalionController.uf2 to the drive that shows up
+
+
+
+# Other Notes
+```device_add usb-host,vendorid=0x0a7b,productid=0xd000,port=1.3```
