@@ -51,6 +51,30 @@ void update_gamepad(Gamepad *gp)
     gp->steel_battalion_in_report.rightPedal  = 0xFC00 * sin((t + 120) * DEG_2_RAD);
     gp->steel_battalion_in_report.tunerDial = (int)floor(t / 22.5) % 16;
 
+	gp->steel_battalion_in_report.dButtons.Eject		= (t / 256) % 3 == 0;
+	gp->steel_battalion_in_report.dButtons.CockpitHatch	= (t / 256) % 3 == 1;
+	gp->steel_battalion_in_report.dButtons.Ignition		= (t / 256) % 3 == 2;
+	gp->steel_battalion_in_report.dButtons.Start		= (t / 256) % 3 == 0;
+
+    gp->steel_battalion_in_report.dButtons.Comm1        = (t / 256) % 3 == 0;
+    gp->steel_battalion_in_report.dButtons.Comm2        = (t / 256) % 3 == 1;
+    gp->steel_battalion_in_report.dButtons.Comm3        = (t / 256) % 3 == 2;
+    gp->steel_battalion_in_report.dButtons.Comm4        = (t / 256) % 3 == 0;
+    gp->steel_battalion_in_report.dButtons.Comm5        = (t / 256) % 3 == 1;
+
+	gp->steel_battalion_in_report.dButtons.Function1 	= (t / 256) % 3 == 0;
+	gp->steel_battalion_in_report.dButtons.Function2 	= (t / 256) % 3 == 1;
+	gp->steel_battalion_in_report.dButtons.Function3 	= (t / 256) % 3 == 2;
+
+	gp->steel_battalion_in_report.dButtons.ForecastShootingSystem = (t / 256) % 3 == 2;
+	gp->steel_battalion_in_report.dButtons.Manipulator			  = (t / 256) % 3 == 0;
+	gp->steel_battalion_in_report.dButtons.LineColorChange 		  = (t / 256) % 3 == 1;
+
+	gp->steel_battalion_in_report.dButtons.TankDetach	= (t / 256) % 3 == 1;
+    gp->steel_battalion_in_report.dButtons.Override		= (t / 256) % 3 == 2;
+	gp->steel_battalion_in_report.dButtons.NightScope	= (t / 256) % 3 == 0;
+
+
 	// TODO: Update the LED colors (as necessary):
 	//     gp->steel_battalion_out_report
 }
