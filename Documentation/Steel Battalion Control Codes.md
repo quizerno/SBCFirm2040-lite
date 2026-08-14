@@ -6,7 +6,7 @@ Struct [here.](https://github.com/faha223/tusb_gamepad/blob/2fd4b6da389a8b1c3da5
 
 Can only be TRUE or FALSE, 1 or 0.
 
-Referenced via: ```steel_battalion_out_report.dButtons```
+Referenced via: ```steel_battalion_out_report.dButtons.B```
 ```
 	//Buttons
 	uint16_t MainWeapon : 1;
@@ -42,9 +42,9 @@ Referenced via: ```steel_battalion_out_report.dButtons```
 	uint16_t Comm3 : 1;
 	uint16_t Comm4 : 1;
 	uint16_t Comm5 : 1;
+	uint16_t SightChange : 1;
 
 	//Toggles
-	uint16_t SightChange : 1;
 	uint16_t ToggleFiltControl : 1;
 	uint16_t ToggleOxygenSupply : 1;
 	uint16_t ToggleFuelFlowRate : 1;
@@ -52,25 +52,31 @@ Referenced via: ```steel_battalion_out_report.dButtons```
 	uint16_t ToggleVTLocation : 1;
 	uint16_t notUsed : 9;
 
-	Example Usage
-steel_battalion_out_report.dButtons.MainWeapon = 1
+//Example Usage
+steel_battalion_out_report.dButtons.MainWeapon = 1 //pressed
+steel_battalion_out_report.dButtons.MainWeapon = 0 //not pressed
 ```
 
 **Gear Lever**
 Values are 7 to 13
 
-Referenced via ```steel_battalion_out_report.gearLever```
+Referenced via ```steel_battalion_out_report.gearLever = integer```
 ```
-int8_t gearLever;        //7-13 is gears R,1,2,3,4,5
+int8_t gearLever;        //7-13 is gears R,N,1,2,3,4,5
 
-	Example Usage
-steel_battalion_out_report.dButtons.gearLever = (int) 4;
+//Example Usage
+steel_battalion_out_report.gearLever = (int) 10; //setting the Gear to 2
 ```
 
 **Tuner Dial**
 
-Referenced via ```steel_battalion_out_report.tunerDial =```
-```	int8_t tunerDial;        //0-15 is from 9oclock, around clockwise```
+Referenced via ```steel_battalion_out_report.tunerDial = integer```
+```	int8_t tunerDial;        //0-15 is from 9oclock, around clockwise
+
+//Example Usage
+steel_battalion_out_report.tunerDial = (int) 9; //setting the dial to 9th position
+
+```
 
 **Weapon Aim (Right Joystick)**	
 
@@ -78,6 +84,11 @@ Referenced via ```steel_battalion_out_report.aimingX =``` and ```steel_battalion
 ```
 uint16_t aimingX;       //0 to 2^16 left to right, does not recenter
 uint16_t aimingY;       //0 to 2^16 top to bottom, does not recenter
+
+//Example Usage
+steel_battalion_out_report.aimingX = ; //X position
+steel_battalion_out_report.aimingY = ; //Y position
+
 ```
 
 **Rotation (Left Joystick)**
@@ -85,6 +96,8 @@ uint16_t aimingY;       //0 to 2^16 top to bottom, does not recenter
 Referenced via ```steel_battalion_out_report.rotationLever =```
 ```
 int16_t rotationLever; // -32768 (Left) to 32767 (Right), re-centers to 0
+
+
 
 ```
 **Camera (Left Hatstick)**
