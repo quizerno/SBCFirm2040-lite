@@ -31,8 +31,10 @@ Once that's done, connect your RP2040 to your PC in Download mode (hold button w
 # Other Notes
 If it does not connect in Xemu immediately, open the monitor with the tilde key (```~```) and enter the commands
 ```
-info usbhost #this will show you which port it is connected to
+#this will show you which port it is connected to
+info usbhost 
 
-device_add usb-host,vendorid=0x0a7b,productid=0xd000,port=1.3 #this will add it to the port, the port might be different (13 = 1.3, 14 =1.4, etc)
+#this will add it to the port, the port might be different (13 = 1.3, 14 =1.4, etc)
+device_add usb-host,vendorid=0x0a7b,productid=0xd000,port=1.3 
 
 ```
