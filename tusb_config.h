@@ -40,7 +40,7 @@
 
 //Hub related
 #define CFG_TUH_HUB 			  1
-#define CFG_TUH_DEVICE_MAX        5
+#define CFG_TUH_DEVICE_MAX        (4 * CFG_TUH_HUB + 1)
 
 // Enforced dependencies for the gamepad framework
 #define CFG_TUD_CDC               1  
@@ -60,7 +60,7 @@
 // HOST CONFIGURATION (Keyboard Reader Input)
 //--------------------------------------------------------------------
 #define CFG_TUH_ENABLED           1  
-#define CFG_TUH_HID               1  
+#define CFG_TUH_HID               4  
 #define CFG_TUH_HID_EP_BUFSIZE    64
 #define CFG_TUH_ENDPOINT_TO_PROCESS 2  
 
