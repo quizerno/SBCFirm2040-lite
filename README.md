@@ -40,3 +40,12 @@ info usbhost
 device_add usb-host,vendorid=0x0a7b,productid=0xd000,port=1.3 
 
 ```
+
+# Completed
+  - Mouse and Keyboard Support
+  - USB HUB Support
+  - 
+# To Do
+  -  Gamepad Support
+  -  Flightstick Support
+  -  Control Configurator
