@@ -17,7 +17,7 @@ For disclosure. It is very crudely built with lots of vibecoding and bug testing
 For set-up clone [pico-sdk](https://github.com/raspberrypi/pico-sdk) to your computer and export path. You may also need to download python3
 
 ```
-git clone --recurse-submodules https://github.com/quizerno/SBCFirm2040-lite.git
+git clone --recurse-submodules https://github.com/raspberrypi/pico-sdk.git
 export PICO_SDK_PATH=$HOME/pico-sdk/
 ```
 
