@@ -33,7 +33,10 @@ target_include_directories(tusb_gamepad PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 target_include_directories(tusb_gamepad PUBLIC ${CMAKE_CURRENT_LIST_DIR}/lib/tinyusb/src)
 target_include_directories(tusb_gamepad PUBLIC ${CMAKE_CURRENT_LIST_DIR}/lib/tinyusb/hw)
 
-# Initialize the Raspberry Pi Pico SDK
+
+
+
+# Initialize the Raspberry Pi Pico SDKT
 pico_sdk_init()
 
 set(SOURCES 
@@ -42,6 +45,8 @@ set(SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/sn74hc165.c 
     ${CMAKE_CURRENT_LIST_DIR}/crc.c 
     ${PICO_TINYUSB_PATH}/src/portable/raspberrypi/pio_usb/hcd_pio_usb.c
+	${CMAKE_CURRENT_SOURCE_DIR}/hid_kbm.c
+	${CMAKE_CURRENT_SOURCE_DIR}/hid_gamepad.c
 )
 
 # Rest of your project
@@ -64,6 +69,11 @@ target_include_directories(${NAME} PRIVATE
     ${PICO_PIO_USB_ROOT}
 )
 
+target_compile_definitions(steel_battalion_controller_fw PRIVATE
+    CFG_TUH_ENUMERATION_BUFSIZE=512
+    CFG_TUD_HID_BUFSIZE=64
+)
+
 # Link libraries together
 target_link_libraries(${NAME}
     pico_stdlib
@@ -80,6 +90,13 @@ target_link_libraries(${NAME}
     hardware_irq
     hardware_timer   
 )
+
+# # Ensure output is sent to physical UART pins (Pins 1 & 2)
+# pico_enable_stdio_uart(steel_battalion_controller_fw 1)
+
+# # Ensure output is NOT captured by the USB port
+# pico_enable_stdio_usb(steel_battalion_controller_fw 0)
+
 
 # Create map/bin/hex/uf2 file in addition to ELF
 pico_add_extra_outputs(${NAME})

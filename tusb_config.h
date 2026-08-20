@@ -40,7 +40,8 @@
 
 //Hub related
 #define CFG_TUH_HUB 			  1
-#define CFG_TUH_DEVICE_MAX        (4 * CFG_TUH_HUB + 1)
+#define CFG_TUH_DEVICE_MAX        4
+//(4 * CFG_TUH_HUB + 1)
 
 // Enforced dependencies for the gamepad framework
 #define CFG_TUD_CDC               1  
@@ -63,6 +64,19 @@
 #define CFG_TUH_HID               4  
 #define CFG_TUH_HID_EP_BUFSIZE    64
 #define CFG_TUH_ENDPOINT_TO_PROCESS 2  
+
+
+//HOST STACK
+// Increase the buffer pool size allocated for capturing incoming device descriptors
+#ifndef CFG_TUH_ENUMERATION_BUFSIZE
+#define CFG_TUH_ENUMERATION_BUFSIZE    512  // Increase from default 256 to 512
+#endif
+
+// Ensure TinyUSB handles complex multiple-axis interfaces concurrently
+#ifndef CFG_TUD_HID_BUFSIZE
+#define CFG_TUD_HID_BUFSIZE            64   // Set to 64 bytes
+#endif
+
 
 #ifdef __cplusplus
  }
