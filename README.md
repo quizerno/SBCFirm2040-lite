@@ -49,8 +49,7 @@ device_add usb-host,vendorid=0x0a7b,productid=0xd000,port=1.3
 # Completed
   - Mouse and Keyboard Support
   - USB HUB Support
-  - 
 # To Do
-  -  Gamepad Support
+  -  Gamepad Support ([Playstation 4 Controller Support added in branch](https://github.com/quizerno/SBCFirm2040-lite/tree/ps4-controller))
   -  Flightstick Support
   -  Control Configurator
