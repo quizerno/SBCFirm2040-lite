@@ -4,8 +4,8 @@ Struct [here.](https://github.com/faha223/tusb_gamepad/blob/2fd4b6da389a8b1c3da5
 
 **Buttons and Toggles**
 
-Can only be TRUE or FALSE, 1 or 0.
-
+Values are TRUE or FALSE, 1 or 0.
+See binding notes for information on timing
 Referenced via: ```steel_battalion_out_report.dButtons.B```
 ```
 	//Buttons
@@ -69,10 +69,11 @@ steel_battalion_out_report.gearLever = (int) 10; //setting the Gear to 2
 ```
 
 **Tuner Dial**
+Values are 0 to 15.
 
 Referenced via ```steel_battalion_out_report.tunerDial = integer```
-```	int8_t tunerDial;        //0-15 is from 9oclock, around clockwise
-
+```
+int8_t tunerDial;        //0-15 is from 9oclock, around clockwise
 //Example Usage
 steel_battalion_out_report.tunerDial = (int) 9; //setting the dial to 9th position
 
@@ -81,6 +82,7 @@ steel_battalion_out_report.tunerDial = (int) 9; //setting the dial to 9th positi
 **Weapon Aim (Right Joystick)**	
 
 Referenced via ```steel_battalion_out_report.aimingX =``` and ```steel_battalion_out_report.aimingX =```
+See binding notes for information on axis coordination.
 ```
 uint16_t aimingX;       //0 to 2^16 left to right, does not recenter
 uint16_t aimingY;       //0 to 2^16 top to bottom, does not recenter
@@ -89,20 +91,28 @@ uint16_t aimingY;       //0 to 2^16 top to bottom, does not recenter
 steel_battalion_out_report.aimingX = ; //X position
 steel_battalion_out_report.aimingY = ; //Y position
 
+
 ```
 
 **Rotation (Left Joystick)**
 
 Referenced via ```steel_battalion_out_report.rotationLever =```
 ```
-int16_t rotationLever; // -32768 (Left) to 32767 (Right), re-centers to 0
+int16_t rotationLever; // -32768 (Left) to 32767 (Right), needs to recenter to zero otherwise will always be active
 
-
-
+//Example Usage
+    if (is_macro_pressed(KEY_A)) {
+        gp->steel_battalion_in_report.rotationLever = -32768; //turn left when you press A
+    } else if (is_macro_pressed(KEY_D)) {
+        gp->steel_battalion_in_report.rotationLever = 32767;  //turn right when you press D
+    } else {
+        gp->steel_battalion_in_report.rotationLever = 0; //when released, go back to middle
+    }
 ```
 **Camera (Left Hatstick)**
 
 Referenced via ```steel_battalion_out_report.INPUT_HERE =```
+See binding notes for information on axis coordination.
 ```
 int16_t sightChangeX;
 int16_t sightChangeY;
@@ -111,6 +121,7 @@ int16_t sightChangeY;
 **Analog Pedals**
 
 Referenced via ```steel_battalion_out_report.INPUT_HERE =```
+See binding notes for information on analog pressure.
 ```
 	uint16_t leftPedal;      //Sidestep, 0x0000 to 0xFF00
 	uint16_t middlePedal;    //Brake, 0x0000 to 0xFF00
