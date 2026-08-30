@@ -23,7 +23,8 @@ set(PICO_TINYUSB_PATH ${CMAKE_CURRENT_LIST_DIR}/lib/tinyusb)
 set(TUSB_GAMEPAD_ROOT ${CMAKE_CURRENT_LIST_DIR}/lib/tusb_gamepad)
 
 # Path to your pico_pio_usb library
-set(PICO_PIO_USB_ROOT ${CMAKE_CURRENT_LIST_DIR}/lib/pico-pio-usb)
+# Needs to be case sensitive
+set(PICO_PIO_USB_ROOT ${CMAKE_CURRENT_LIST_DIR}/lib/Pico-PIO-USB)
 
 add_subdirectory(${TUSB_GAMEPAD_ROOT})
 # Add pico_pio_usb subdirectory to build its state-machines
