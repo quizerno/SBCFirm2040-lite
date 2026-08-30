@@ -21,6 +21,8 @@ export PICO_SDK_PATH=$HOME/pico-sdk/
 ```bash
 git clone --recurse-submodules https://github.com/quizerno/SBCFirm2040-lite.git
 cd SBCFirm2040-lite
+git submodule sync --recursive
+git submodule update --init --force --recursive
 mkdir build
 cd build
 cmake ..
