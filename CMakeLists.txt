@@ -15,6 +15,9 @@ add_compile_definitions(    PICO_BOOT_STAGE2_CHOOSE_GENERIC_03H=1
 # Initialize the SDK based on PICO_SDK_PATH
 include ($ENV{PICO_SDK_PATH}/pico_sdk_init.cmake)
 
+# Initialize the Raspberry Pi Pico SDKT
+pico_sdk_init()
+
 project(${NAME} C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
@@ -33,12 +36,6 @@ add_subdirectory(${PICO_PIO_USB_ROOT})
 target_include_directories(tusb_gamepad PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 target_include_directories(tusb_gamepad PUBLIC ${CMAKE_CURRENT_LIST_DIR}/lib/tinyusb/src)
 target_include_directories(tusb_gamepad PUBLIC ${CMAKE_CURRENT_LIST_DIR}/lib/tinyusb/hw)
-
-
-
-
-# Initialize the Raspberry Pi Pico SDKT
-pico_sdk_init()
 
 set(SOURCES 
     ${CMAKE_CURRENT_LIST_DIR}/main.c 
