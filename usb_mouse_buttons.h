@@ -2,12 +2,12 @@
 #define USB_MOUSE_BUTTONS_H
 
 // --- STANDARD HID MOUSE BUTTON BITMASKS ---
-#define MOUSE_BUTTON_NONE   0x00
-#define MOUSE_BUTTON_LEFT   0x01  // Standard Left Click
-#define MOUSE_BUTTON_RIGHT  0x02  // Standard Right Click
-#define MOUSE_BUTTON_MIDDLE 0x04  // Scroll Wheel Click
-#define MOUSE_BUTTON_SIDE1  0x08  // Backward Navigation Side Button (Button 4)
-#define MOUSE_BUTTON_SIDE2  0x10  // Forward Navigation Side Button (Button 5)
+#define MOUSE_BTN_NONE   0x00
+#define MOUSE_BTN_LEFT   0x01  // Standard Left Click
+#define MOUSE_BTN_RIGHT  0x02  // Standard Right Click
+#define MOUSE_BTN_MIDDLE 0x04  // Scroll Wheel Click
+#define MOUSE_BTN_SIDE1  0x08  // Backward Navigation Side Button (Button 4)
+#define MOUSE_BTN_SIDE2  0x10  // Forward Navigation Side Button (Button 5)
 
 // --- VIRTUAL SIGNATURE MARKERS FOR SCROLL DIRECTIONS ---
 // These use upper bits outside standard 5-button layouts so they 

@@ -115,30 +115,25 @@ int main(void) {
 //bool persistent_touch_active = false;
 
     while (1) {
-        // Sync local tracking states from shared global values safely
-        local_modifiers = global_modifiers;
+        // 1. Snapshot global inputs into local registers instantly
+        local_modifiers     = global_modifiers;
         for (int i = 0; i < 6; i++) local_keycodes[i] = global_keycodes[i];
         local_mouse_buttons = global_mouse_buttons;
         local_mouse_x       = global_mouse_x;
         local_mouse_y       = global_mouse_y;
         local_mouse_wheel   = global_mouse_wheel;
 
-
-        // 2. Clear global frames and activities
-        global_mouse_x = 0; global_mouse_y = 0; global_mouse_wheel = 0;
+        // 2. Clear global states exactly ONCE for the next core1 interrupt window
+        global_mouse_x = 0; 
+        global_mouse_y = 0; 
+        global_mouse_wheel = 0;
         gamepad_activity = false;
 
-        // 3. FORCE ZERO local_joy_data here so it can never hold stale touch data or ignore inputs
+        // 3. Clear local frame structures safely 
         memset(&local_joy_data, 0, sizeof(generic_gamepad_data_t));
         local_joy_data.hat = 8; // Default hat to idle release
 
-
-
-        // Clear global delta states for next hardware interrupt tick
-        global_mouse_x = 0; global_mouse_y = 0; global_mouse_wheel = 0;
-        gamepad_activity = false;
-
-        // Pull asynchronous raw network frames from Core 1
+        // 4. Check for incoming gamepad packets from Core 1
         usb_packet_t pkt;
         if (queue_try_remove(&gamepad_packet_queue, &pkt)) {
             bool parsed_ok = false;
@@ -149,30 +144,24 @@ int main(void) {
             }
 
             if (parsed_ok) {
-				//persistent_touch_active = local_joy_data.finger_active;
-                // CORRECTION: Check if D-pad is active (anything except 8) OR if any digital buttons are clicked
                 bool button_or_hat_active = (local_joy_data.buttons != 0) || (local_joy_data.hat != 8);
-				bool touch_active = (local_joy_data.finger_active);
-                // CORRECTION: Apply defensive deadzones to your newly mapped LX and LY variables
+                bool touch_active = (local_joy_data.finger_active);
                 bool analog_sticks_active = (abs(local_joy_data.lx) > 15) || (abs(local_joy_data.ly) > 15) ||
                                             (abs(local_joy_data.rx) > 15) || (abs(local_joy_data.ry) > 15);
-				bool z_axis_active = (abs(local_joy_data.z_trigger != 0));
-				//(abs(local_joy_data.finger_x>8) || abs(local_joy_data.finger_x>4));
-				//bool touch_active = (abs(local_joy_data.touch0.active != 1);
+                bool z_axis_active = (local_joy_data.z_trigger != 0);
 				
                 gamepad_activity = button_or_hat_active || analog_sticks_active || z_axis_active || touch_active;
             }
         }
 
-
         // --- CONSOLIDATED STEEL BATTALION MAPPING MACHINE ---
         apply_inputs_to_steel_battalion(gp, &local_joy_data, gamepad_activity);
 
-        // Core 0 updates activity signaling LED status
-		//LED ACTIVE
+        // 5. System status LED indicators
         bool key_active = false;
         for (int i = 0; i < 6; i++) { if (local_keycodes[i] != 0) { key_active = true; break; } }
-        if (key_active || local_modifiers != 0 || local_mouse_buttons != 0 || gamepad_activity) {
+        // Include mouse movement as a valid reason to turn on the LED indicator
+        if (key_active || local_modifiers != 0 || local_mouse_buttons != 0 || local_mouse_x != 0 || local_mouse_y != 0 || gamepad_activity) {
             gpio_put(PICO_LED_PIN, 1);
         } else {
             gpio_put(PICO_LED_PIN, 0);
@@ -181,6 +170,7 @@ int main(void) {
         tusb_gamepad_task();
         tud_task(); 
     }
+//end of while
     return 0;
 }
 
@@ -333,18 +323,24 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
     uint8_t usage_id = 0;
 
     if (check_sony_device(dev_addr)) {
-        usage_id = 0x99; // Assign our custom identification tag for PS4/DS4
+        usage_id = 0x99; // Custom identification tag for PS4/DS4
     } else if (itf_protocol == HID_ITF_PROTOCOL_NONE) {
         tuh_hid_report_info_t report_info[3]; 
         uint8_t report_count = tuh_hid_parse_report_descriptor(report_info, 3, desc_report, desc_len);
+        
         for (uint8_t i = 0; i < report_count; i++) {
-            if (report_info[i].usage_page == 0x01 && (report_info[i].usage == 0x04 || report_info[i].usage == 0x05)) {
-                usage_id = report_info[i].usage; 
-                break;
+            if (report_info[i].usage_page == 0x01) { // Generic Desktop Page
+                if (report_info[i].usage == 0x02) {
+                    usage_id = HID_ITF_PROTOCOL_MOUSE; // Explicitly treat as Mouse (2)
+                    break;
+                } else if (report_info[i].usage == 0x04 || report_info[i].usage == 0x05) {
+                    usage_id = report_info[i].usage; // Joysticks / Gamepads
+                    break;
+                }
             }
         }
     } else {
-        usage_id = itf_protocol; // Standard Keyboard (1) or Mouse (2)
+        usage_id = itf_protocol; // Standard Keyboard (1) or Mouse (2) fallback
     }
 
     if (usage_id == 0) return;
@@ -360,6 +356,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
         }
     }
 }
+
 
 // TinyUSB callback: Triggered when an HID device is pulled out
 void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
