@@ -14,6 +14,7 @@ typedef enum {
     INPUT_SRC_KEYBOARD,
     INPUT_SRC_MOUSE,
 	INPUT_SRC_GAMEPAD,
+	INPUT_SRC_HID,
 	INPUT_SRC_FLIGHTSTICK
 } InputSourceType_t;
 

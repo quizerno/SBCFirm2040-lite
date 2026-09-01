@@ -1,3 +1,5 @@
+
+#include "device_profiles.h"
 #include "tusb_gamepad.h"  // <--- ADD THIS LINE HERE TO DEFINE THE GAMEPAD TYPE
 #include "input_mapping.h"
 #include <stdlib.h>
@@ -126,8 +128,8 @@ int main(void) {
         // 2. Clear global states exactly ONCE for the next core1 interrupt window
         global_mouse_x = 0; 
         global_mouse_y = 0; 
-        global_mouse_wheel = 0;
         gamepad_activity = false;
+        global_mouse_wheel = 0;
 
         // 3. Clear local frame structures safely 
         memset(&local_joy_data, 0, sizeof(generic_gamepad_data_t));
@@ -136,12 +138,8 @@ int main(void) {
         // 4. Check for incoming gamepad packets from Core 1
         usb_packet_t pkt;
         if (queue_try_remove(&gamepad_packet_queue, &pkt)) {
-            bool parsed_ok = false;
-            if (pkt.usage_id == 0x99) { 
-                parsed_ok = parse_ps4_controller(pkt.report, pkt.len, &local_joy_data);
-            } else if (pkt.usage_id == 0x04 || pkt.usage_id == 0x05) { 
-                parsed_ok = parse_generic_hid_gamepad(pkt.report, pkt.len, &local_joy_data);
-            }
+            // High-level modular call hides routing switches and identity processing entirely
+            bool parsed_ok = route_and_parse_gamepad(pkt.report, pkt.len, pkt.dev_addr, &local_joy_data);
 
             if (parsed_ok) {
                 bool button_or_hat_active = (local_joy_data.buttons != 0) || (local_joy_data.hat != 8);

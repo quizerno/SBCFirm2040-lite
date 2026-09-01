@@ -1,6 +1,8 @@
+#include "device_profiles.h"
 #include "hid_gamepad.h"
 #include <stdlib.h>
 #include <string.h>
+#include "host/usbh.h"
 
 typedef struct TU_ATTR_PACKED {
     uint8_t lx;       // Sony tracks Left Stick X here
@@ -111,19 +113,114 @@ bool parse_ps4_controller(uint8_t const* report, uint16_t len, generic_gamepad_d
     return true;
 }
 
+// Updated generic parsing function to specifically handle Logitech layouts
 bool parse_generic_hid_gamepad(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data) {
-    if (len < 3) return false;
+    // The Logitech Dual Action sends a 6-byte or 8-byte report packet
+    if (len < 6) return false;
+
+    // 1. Map Left and Right Sticks: Convert unsigned offset (0..255) to signed (-128..127)
     out_data->lx = (int16_t)report[0] - 128;
     out_data->ly = (int16_t)report[1] - 128;
-    out_data->rx = (len >= 3) ? ((int16_t)report[2] - 128) : 0;
-    out_data->ry = (len >= 4) ? ((int16_t)report[3] - 128) : 0;
-    out_data->z_trigger = 0;
+    out_data->rx = (int16_t)report[2] - 128;
+    out_data->ry = (int16_t)report[3] - 128;
+    
+    out_data->z_trigger = 0; // The Logitech Dual Action does not have analog triggers
 
-    out_data->hat = (len >= 5) ? (report[4] & 0x0F) : 8;
-    if (out_data->hat > 8) out_data->hat = 8; // Defensive clamping back to absolute idle release
+    // 2. Parse Hat Switch (D-Pad)
+    // On the Logitech, the lower 4 bits of Byte 4 contain the Hat Switch state.
+    // 0 = North, 1 = North-East, 2 = East, ..., 7 = North-West, 15 (or 8) = Idle Release
+    uint8_t hat_raw = report[4] & 0x0F;
+    if (hat_raw > 7) {
+        out_data->hat = 8; // Safely force to absolute idle release
+    } else {
+        out_data->hat = hat_raw;
+    }
 
+    // 3. Map Digital Buttons (Logitech features 12 digital face switches/triggers)
     out_data->buttons = 0;
-    if (len >= 6) out_data->buttons |= ((uint32_t)report[5]);
-    if (len >= 7) out_data->buttons |= ((uint32_t)report[6] << 8);
+
+    // Buttons 1-4 are packed into the high nibble (upper 4 bits) of Byte 4
+    uint8_t upper_buttons = (report[4] >> 4) & 0x0F; 
+    out_data->buttons |= (upper_buttons & 0x01) << 0; // Button 1 (X / Cross equivalent)
+    out_data->buttons |= (upper_buttons & 0x02) << 1; // Button 2 (A / Circle equivalent)
+    out_data->buttons |= (upper_buttons & 0x04) << 2; // Button 3 (B / Square equivalent)
+    out_data->buttons |= (upper_buttons & 0x08) << 3; // Button 4 (Y / Triangle equivalent)
+
+    // Buttons 5-12 occupy the entirety of Byte 5
+    uint8_t byte5_buttons = report[5];
+    out_data->buttons |= (uint32_t)byte5_buttons << 4; // Shifts Buttons 5-12 cleanly into bits 4-11
+
     return true;
+}
+
+// ... Keep your existing parse_ps4_controller and parse_generic_hid_gamepad here ...
+
+// Modular parser dedicated strictly to the Logitech Dual Action layout
+bool parse_logitech_dual_action(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data) {
+    if (len < 6) return false;
+
+    // 1. Map Axes (Unsigned 8-bit to Signed 8-bit offsets)
+    out_data->lx = (int16_t)report[0] - 128;
+    out_data->ly = (int16_t)report[1] - 128;
+    out_data->rx = (int16_t)report[2] - 128;
+    out_data->ry = (int16_t)report[3] - 128;
+    out_data->z_trigger = 0; // Digital buttons only, no analog triggers
+
+    // 2. Map Hat Switch (Lower 4 bits of Byte 4)
+    uint8_t hat_raw = report[4] & 0x0F;
+    out_data->hat = (hat_raw > 7) ? 8 : hat_raw;
+
+    // 3. Map Digital Action Buttons
+    out_data->buttons = 0;
+
+    // Buttons 1-4 are packed into the high nibble of Byte 4
+    uint8_t upper_buttons = (report[4] >> 4) & 0x0F; 
+    out_data->buttons |= (upper_buttons & 0x01) << 0; // Button 1
+    out_data->buttons |= (upper_buttons & 0x02) << 1; // Button 2
+    out_data->buttons |= (upper_buttons & 0x04) << 2; // Button 3
+    out_data->buttons |= (upper_buttons & 0x08) << 3; // Button 4
+
+    // Buttons 5-12 occupy the entirety of Byte 5
+    uint8_t byte5_buttons = report[5];
+    out_data->buttons |= (uint32_t)byte5_buttons << 4; // Shift into bits 4-11
+
+    // Clear touchpad fields since this hardware lacks touch support
+    out_data->tpad_packets = 0;
+    out_data->finger_active = false;
+    out_data->finger_x = 0;
+    out_data->finger_y = 0;
+
+    return true;
+}
+/**
+ * Automatically identifies a connected gamepad device and executes its matching 
+ * hardware-specific parsing strategy.
+ */
+bool route_and_parse_gamepad(uint8_t const* report, uint16_t len, uint8_t dev_addr, generic_gamepad_data_t* out_data) {
+    uint16_t vid = 0, pid = 0;
+    
+    // Extract hardware descriptors from the active TinyUSB stack instance
+    tuh_vid_pid_get(dev_addr, &vid, &pid);
+
+    // Look up the active profiling layout match from our registry
+    gamepad_profile_id_t active_profile = PROFILE_GENERIC_HID;
+    for (size_t i = 0; i < GAMEPAD_REGISTRY_COUNT; i++) {
+        if (GAMEPAD_REGISTRY[i].vid == vid && GAMEPAD_REGISTRY[i].pid == pid) {
+            active_profile = GAMEPAD_REGISTRY[i].profile_id;
+            break;
+        }
+    }
+
+    // Execute decoding pipeline based on selected tracking profile
+    switch (active_profile) {
+        case PROFILE_SONY_DS4:
+            return parse_ps4_controller(report, len, out_data);
+
+        case PROFILE_LOGITECH_DUAL_ACTION:
+            return parse_logitech_dual_action(report, len, out_data);
+
+        case PROFILE_GENERIC_HID:
+        default:
+            return parse_generic_hid_gamepad(report, len, out_data);
+    }
 }
