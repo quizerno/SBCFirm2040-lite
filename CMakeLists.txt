@@ -46,7 +46,8 @@ set(SOURCES
     ${CMAKE_CURRENT_LIST_DIR}/crc.c 
     ${PICO_TINYUSB_PATH}/src/portable/raspberrypi/pio_usb/hcd_pio_usb.c
 	${CMAKE_CURRENT_SOURCE_DIR}/hid_kbm.c
-	${CMAKE_CURRENT_SOURCE_DIR}/hid_gamepad.c
+	${CMAKE_CURRENT_SOURCE_DIR}/hid_gamepad.c    
+	${CMAKE_CURRENT_SOURCE_DIR}/device_profiles.h
 )
 
 # Rest of your project

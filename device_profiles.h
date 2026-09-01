@@ -10,7 +10,8 @@ typedef enum {
     PROFILE_GENERIC_HID = 0,
     PROFILE_SONY_DS4,
     PROFILE_LOGITECH_DUAL_ACTION,
-    PROFILE_DEBUG_RAW_DUMP       // Fallback for simulation gear to capture and dump data fields
+    PROFILE_STEEL_BATTALION,      // Native direct-pass profile for VT simulation setups
+    PROFILE_DEBUG_RAW_DUMP        // Fallback for simulation gear to capture data fields
 } gamepad_profile_id_t;
 
 // Structural registry entry
@@ -24,6 +25,9 @@ typedef struct {
 
 // Central Look-Up Registry for Hardware Identification Tracking
 static const gamepad_device_id_t GAMEPAD_REGISTRY[] = {
+    // === NATIVE EMULATED SIMULATION GEAR ===
+    { 0x0A7B, 0xD000, PROFILE_STEEL_BATTALION,     "Simulation",   "Emulated Steel Battalion Controller" },
+
     // === SONY CONSOLES ===
     { 0x054C, 0x05C4, PROFILE_SONY_DS4,            "Gamepad",      "Sony DualShock 4 V1" },
     { 0x054C, 0x09CC, PROFILE_SONY_DS4,            "Gamepad",      "Sony DualShock 4 V2" },
@@ -75,10 +79,11 @@ static const gamepad_device_id_t GAMEPAD_REGISTRY[] = {
     { 0x1209, 0x2328, PROFILE_DEBUG_RAW_DUMP,       "Arcade/Retro", "Generic Brook Fighting Board" }
 };
 
-#define GAMEPAD_REGISTRY_COUNT (sizeof(GAMEPAD_REGISTRY) / sizeof(GAMEPAD_REGISTRY[0]))
+#define GAMEPAD_REGISTRY_COUNT (sizeof(GAMEPAD_REGISTRY) / sizeof(GAMEPAD_REGISTRY))
 
 // Execution and Routing Pipeline Signatures
 bool route_and_parse_gamepad(uint8_t const* report, uint16_t len, uint8_t dev_addr, generic_gamepad_data_t* out_data);
 bool parse_logitech_dual_action(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data);
+bool parse_steel_battalion_native(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data);
 
 #endif // DEVICE_PROFILES_H

@@ -1,8 +1,11 @@
-#include "device_profiles.h"
 #include "hid_gamepad.h"
+#include "device_profiles.h"
+#include "tusb.h"
+#include "host/usbh.h"  
 #include <stdlib.h>
 #include <string.h>
-#include "host/usbh.h"
+#include <stdio.h>      
+
 
 typedef struct TU_ATTR_PACKED {
     uint8_t lx;       // Sony tracks Left Stick X here
@@ -25,7 +28,6 @@ typedef struct TU_ATTR_PACKED {
         uint8_t option : 1;
         uint8_t l3     : 1;
         uint8_t r3     : 1;
-		//uint8_t tpad_click     : 1;
     };
     struct {
         uint8_t ps      : 1; 
@@ -34,7 +36,6 @@ typedef struct TU_ATTR_PACKED {
     };
     uint8_t l2_trigger; // Analog Pressure (0 to 255)
     uint8_t r2_trigger; // Analog Pressure (0 to 255)
-	// Touch tracking sequence frame parameters
     uint8_t tpad_packets; 
     
     struct {
@@ -45,9 +46,62 @@ typedef struct TU_ATTR_PACKED {
         uint8_t y_low    : 4; 
         uint8_t y_high;       
     } touch0;
-	
-	
 } sony_ds4_report_t;
+
+// Formatted system diagnostic display utility over USB-UART Serial
+static void debug_dump_raw_report(uint8_t const* report, uint16_t len, const char* name, uint16_t vid, uint16_t pid) {
+    printf("\n=== [PICO HOST HID ATTACHMENT REPORT DUMP] ===\n");
+    printf("  Target Device : %s\n", name);
+    printf("  Hardware ID   : [VID: 0x%04X | PID: 0x%04X]\n", vid, pid);
+    printf("  Packet Length : %d Bytes\n", len);
+    printf("----------------------------------------------\n  Raw Payload Hex Stream:\n  ");
+    
+    for (uint16_t i = 0; i < len; i++) {
+        printf("%02X ", report[i]);
+        if ((i + 1) % 16 == 0 && (i + 1) < len) {
+            printf("\n  "); // Align columns perfectly for terminal viewing windows
+        }
+    }
+    printf("\n==============================================\n\n");
+}
+
+/**
+ * Parses native Steel Battalion data streams.
+ * Direct-maps specialized controls without intermediate gamepad conversion errors.
+ */
+bool parse_steel_battalion_native(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data) {
+    // Structural envelope safety assertion
+    if (len < sizeof(steel_battalion_native_report_t)) {
+        printf("[WARN] SB Native packet payload undersized: Got %d bytes, expected %d\n", len, sizeof(steel_battalion_native_report_t));
+        return false;
+    }
+
+    steel_battalion_native_report_t sb_raw;
+    memcpy(&sb_raw, report, sizeof(steel_battalion_native_report_t));
+
+    // Clear structural targets safely 
+    memset(out_data, 0, sizeof(generic_gamepad_data_t));
+    out_data->hat = 8; // Maintain default idle release state marker
+
+    // 1. Forward raw analog components directly to target registers
+    // We downscale 16-bit inputs into generic 8-bit envelopes by shifting out noisy bits
+    out_data->lx = (int8_t)(sb_raw.aiming_x >> 8);
+    out_data->ly = (int8_t)(sb_raw.aiming_y >> 8);
+    out_data->rx = (int8_t)(sb_raw.sight_change_x >> 8);
+    out_data->ry = (int8_t)(sb_raw.sight_change_y >> 8);
+
+    // 2. Combine foot elements into a singular analog trigger channel
+    out_data->z_trigger = (int16_t)sb_raw.accelerator_pedal - (int16_t)sb_raw.brake_pedal;
+
+    // 3. Map digital bits cleanly into uniform output spaces
+    out_data->buttons = sb_raw.buttons_block1;
+
+    // Optional Verbose Diagnostic tracking flag (Uncomment to watch real-time inputs over serial)
+    // printf("[SB-NATIVE LIVE] Aim X: %4d | Aim Y: %4d | Pedals Accel: %3d\n", sb_raw.aiming_x, sb_raw.aiming_y, sb_raw.accelerator_pedal);
+
+    return true; 
+}
+
 
 bool parse_ps4_controller(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data) {
     // Basic defensive boundary check: Verify Report ID is 1 and data size is safe
@@ -79,17 +133,16 @@ bool parse_ps4_controller(uint8_t const* report, uint16_t len, generic_gamepad_d
     out_data->buttons |= (ds4.share    << 6);
     out_data->buttons |= (ds4.option   << 7);
     out_data->buttons |= (ds4.ps       << 8);
-	out_data->buttons |= (ds4.l3       << 9);
-	out_data->buttons |= (ds4.r3       << 10);
-	out_data->buttons |= (ds4.tpad_click << 11);
+    out_data->buttons |= (ds4.l3       << 9);
+    out_data->buttons |= (ds4.r3       << 10);
+    out_data->buttons |= (ds4.tpad_click << 11);
 	
-	// CONSOLIDATION: Inject physical touchpad press into bit index 11
-    // 2. Continuous Tracking Streams
+    // CONSOLIDATION: Inject physical touchpad press into bit index 11
+    // Continuous Tracking Streams
     out_data->tpad_packets = ds4.tpad_packets;
     out_data->finger_active = (ds4.touch0.active == 0);
 
-
-    // 4. THE TOUCHPAD ACTIVE BIT FIX:
+    // THE TOUCHPAD ACTIVE BIT FIX:
     // In a standard USB report, the first finger status byte sits at exactly index 35.
     // Bit 7 of this byte is the active bit: 0 = Touched, 1 = Idle.
     uint8_t finger0_status_byte = report[35];
@@ -113,49 +166,10 @@ bool parse_ps4_controller(uint8_t const* report, uint16_t len, generic_gamepad_d
     return true;
 }
 
-// Updated generic parsing function to specifically handle Logitech layouts
-bool parse_generic_hid_gamepad(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data) {
-    // The Logitech Dual Action sends a 6-byte or 8-byte report packet
-    if (len < 6) return false;
-
-    // 1. Map Left and Right Sticks: Convert unsigned offset (0..255) to signed (-128..127)
-    out_data->lx = (int16_t)report[0] - 128;
-    out_data->ly = (int16_t)report[1] - 128;
-    out_data->rx = (int16_t)report[2] - 128;
-    out_data->ry = (int16_t)report[3] - 128;
-    
-    out_data->z_trigger = 0; // The Logitech Dual Action does not have analog triggers
-
-    // 2. Parse Hat Switch (D-Pad)
-    // On the Logitech, the lower 4 bits of Byte 4 contain the Hat Switch state.
-    // 0 = North, 1 = North-East, 2 = East, ..., 7 = North-West, 15 (or 8) = Idle Release
-    uint8_t hat_raw = report[4] & 0x0F;
-    if (hat_raw > 7) {
-        out_data->hat = 8; // Safely force to absolute idle release
-    } else {
-        out_data->hat = hat_raw;
-    }
-
-    // 3. Map Digital Buttons (Logitech features 12 digital face switches/triggers)
-    out_data->buttons = 0;
-
-    // Buttons 1-4 are packed into the high nibble (upper 4 bits) of Byte 4
-    uint8_t upper_buttons = (report[4] >> 4) & 0x0F; 
-    out_data->buttons |= (upper_buttons & 0x01) << 0; // Button 1 (X / Cross equivalent)
-    out_data->buttons |= (upper_buttons & 0x02) << 1; // Button 2 (A / Circle equivalent)
-    out_data->buttons |= (upper_buttons & 0x04) << 2; // Button 3 (B / Square equivalent)
-    out_data->buttons |= (upper_buttons & 0x08) << 3; // Button 4 (Y / Triangle equivalent)
-
-    // Buttons 5-12 occupy the entirety of Byte 5
-    uint8_t byte5_buttons = report[5];
-    out_data->buttons |= (uint32_t)byte5_buttons << 4; // Shifts Buttons 5-12 cleanly into bits 4-11
-
-    return true;
-}
-
-// ... Keep your existing parse_ps4_controller and parse_generic_hid_gamepad here ...
-
-// Modular parser dedicated strictly to the Logitech Dual Action layout
+/**
+ * Parses raw reports from a Logitech Dual Action Gamepad (VID 046D, PID C216).
+ * Safely unpacks stacked hat and button blocks.
+ */
 bool parse_logitech_dual_action(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data) {
     if (len < 6) return false;
 
@@ -192,27 +206,57 @@ bool parse_logitech_dual_action(uint8_t const* report, uint16_t len, generic_gam
 
     return true;
 }
+
 /**
- * Automatically identifies a connected gamepad device and executes its matching 
- * hardware-specific parsing strategy.
+ * Fallback parser for standard, generic baseline USB HID Gamepads.
+ */
+bool parse_generic_hid_gamepad(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data) {
+    if (len < 3) return false;
+    out_data->lx = (int16_t)report[0] - 128;
+    out_data->ly = (int16_t)report[1] - 128;
+    out_data->rx = (len >= 3) ? ((int16_t)report[2] - 128) : 0;
+    out_data->ry = (len >= 4) ? ((int16_t)report[3] - 128) : 0;
+    out_data->z_trigger = 0;
+
+    out_data->hat = (len >= 5) ? (report[4] & 0x0F) : 8;
+    if (out_data->hat > 8) out_data->hat = 8; // Defensive clamping back to absolute idle release
+
+    out_data->buttons = 0;
+    if (len >= 6) out_data->buttons |= ((uint32_t)report[5]);
+    if (len >= 7) out_data->buttons |= ((uint32_t)report[6] << 8);
+    return true;
+}
+
+/**
+ * Automated System Router: Identifies connected equipment descriptors,
+ * applies profiling parameters, and dumps telemetry cleanly over the UART console.
  */
 bool route_and_parse_gamepad(uint8_t const* report, uint16_t len, uint8_t dev_addr, generic_gamepad_data_t* out_data) {
     uint16_t vid = 0, pid = 0;
-    
-    // Extract hardware descriptors from the active TinyUSB stack instance
     tuh_vid_pid_get(dev_addr, &vid, &pid);
 
-    // Look up the active profiling layout match from our registry
     gamepad_profile_id_t active_profile = PROFILE_GENERIC_HID;
+    const char* active_name = "Unknown Generic Peripheral";
+
     for (size_t i = 0; i < GAMEPAD_REGISTRY_COUNT; i++) {
         if (GAMEPAD_REGISTRY[i].vid == vid && GAMEPAD_REGISTRY[i].pid == pid) {
             active_profile = GAMEPAD_REGISTRY[i].profile_id;
+            active_name = GAMEPAD_REGISTRY[i].name;
             break;
         }
     }
 
-    // Execute decoding pipeline based on selected tracking profile
+    // Always trigger a diagnostic trace log onto console whenever a generic or debug item cycles data
+    if (active_profile == PROFILE_DEBUG_RAW_DUMP) {
+        debug_dump_raw_report(report, len, active_name, vid, pid);
+        return false; 
+    }
+
+    // Execute standard operational decoders
     switch (active_profile) {
+        case PROFILE_STEEL_BATTALION:
+            return parse_steel_battalion_native(report, len, out_data);
+
         case PROFILE_SONY_DS4:
             return parse_ps4_controller(report, len, out_data);
 
