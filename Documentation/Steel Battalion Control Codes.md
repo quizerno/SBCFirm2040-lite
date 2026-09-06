@@ -2,8 +2,7 @@
 Located [here](https://github.com/faha223/tusb_gamepad/blob/2fd4b6da389a8b1c3da55b9d0eaf2cd30979cd57/src/drivers/xboxog/xid/xid_steelbattalion.h).
 Struct [here.](https://github.com/faha223/tusb_gamepad/blob/2fd4b6da389a8b1c3da55b9d0eaf2cd30979cd57/src/Gamepad.h#L95)
 
-**Buttons and Toggles**
-
+**Buttons and Toggles**<br/>
 Values are TRUE or FALSE, 1 or 0.
 See binding notes for information on timing
 Referenced via: ```steel_battalion_out_report.dButtons.B```
@@ -57,7 +56,7 @@ steel_battalion_out_report.dButtons.MainWeapon = 1 //pressed
 steel_battalion_out_report.dButtons.MainWeapon = 0 //not pressed
 ```
 
-**Gear Lever**
+**Gear Lever**<br/>
 Values are 7 to 13
 
 Referenced via ```steel_battalion_out_report.gearLever = integer```
@@ -68,7 +67,7 @@ int8_t gearLever;        //7-13 is gears R,N,1,2,3,4,5
 steel_battalion_out_report.gearLever = (int) 10; //setting the Gear to 2
 ```
 
-**Tuner Dial**
+**Tuner Dial**<br/>
 Values are 0 to 15.
 
 Referenced via ```steel_battalion_out_report.tunerDial = integer```
@@ -79,8 +78,7 @@ steel_battalion_out_report.tunerDial = (int) 9; //setting the dial to 9th positi
 
 ```
 
-**Weapon Aim (Right Joystick)**	
-
+**Weapon Aim (Right Joystick)**	<br/>
 Referenced via ```steel_battalion_out_report.aimingX =``` and ```steel_battalion_out_report.aimingX =```
 See binding notes for information on axis coordination.
 ```
@@ -94,8 +92,7 @@ steel_battalion_out_report.aimingY = ; //Y position
 
 ```
 
-**Rotation (Left Joystick)**
-
+**Rotation (Left Joystick)**<br/>
 Referenced via ```steel_battalion_out_report.rotationLever =```
 ```
 int16_t rotationLever; // -32768 (Left) to 32767 (Right), needs to recenter to zero otherwise will always be active
@@ -109,8 +106,7 @@ int16_t rotationLever; // -32768 (Left) to 32767 (Right), needs to recenter to z
         gp->steel_battalion_in_report.rotationLever = 0; //when released, go back to middle
     }
 ```
-**Camera (Left Hatstick)**
-
+**Camera (Left Hatstick)**<br/>
 Referenced via ```steel_battalion_out_report.INPUT_HERE =```
 See binding notes for information on axis coordination.
 ```
@@ -118,8 +114,7 @@ int16_t sightChangeX;
 int16_t sightChangeY;
 ```
 
-**Analog Pedals**
-
+**Analog Pedals**<br/>
 Referenced via ```steel_battalion_out_report.INPUT_HERE =```
 See binding notes for information on analog pressure.
 ```
