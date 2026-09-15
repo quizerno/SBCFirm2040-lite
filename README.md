@@ -6,6 +6,9 @@ the stock [PICO-PIO-USB Host example](https://github.com/raspberrypi/pico-exampl
 
 For disclosure. It is very crudely built with lots of vibecoding and bug testing via AI assistance. I had attempted to use several barebones examples of the host driver and try to get this working myself. But kept running into problems with dependencies and understanding how the configuration settings worked.
 
+
+
+
 ### Hardware
 
 * 1 x Raspberry Pi Pico/RP2040
@@ -15,7 +18,7 @@ For disclosure. It is very crudely built with lots of vibecoding and bug testing
 * 1 x Powered USB HUB - Needed if connecting more than one Device
 
 
-### Wiring 
+# Wiring 
 
 **Notes:** I have only tested this with a regular PICO
 
@@ -27,7 +30,9 @@ Follow either of the examples here
 **Neopixel LED**<br/>
 The Pico runs on 3.3v so you will need to power the LED via the 3.3 out on the Pico.
 
-### Set-up
+# Firmware
+
+**Set-up**<br/>
 For set-up clone [pico-sdk](https://github.com/raspberrypi/pico-sdk) to your computer and export path. You may also need to download python3
 
 ```
@@ -35,8 +40,7 @@ git clone --recurse-submodules https://github.com/raspberrypi/pico-sdk.git
 export PICO_SDK_PATH=$HOME/pico-sdk/
 ```
 
-### Build Instructions
-
+**Build Instructions**<br/>
 ```bash
 git clone --recurse-submodules https://github.com/quizerno/SBCFirm2040-lite.git
 cd SBCFirm2040-lite
@@ -47,33 +51,45 @@ make
 ```
 Once that's done, connect your RP2040 to your PC in Download mode (hold button while connecting), and copy SteelBattalionController.uf2 to the drive that shows up
 
+# Configuration
 
-# Other Notes
+
+## USB Host
+### Keyboard
+### Gamepads-Joystick-Flightstick
+### Steel Battalion Passthrough
+## GPIO
+
+##
+
+# Connecting in Xemu
 If it does not connect in Xemu immediately, open the monitor with the tilde key (```~```) and enter the commands
 ```
 #this will show you which port it is connected to
 info usbhost 
 
 #this will add it to the port, the port might be different (13 = 1.3, 14 =1.4, etc)
-device_add usb-host,vendorid=0x0a7b,productid=0xd000,port=1.3 
-
+device_add usb-host,vendorid=0x0a7b,productid=0xd000,port=1.3
 ```
-# Other Repositories Used
-* [PICO-PIO-USB Host example](https://github.com/raspberrypi/pico-examples/tree/master/usb/host/host_cdc_msc_hid).
-* [TinyUSB HID Controller](https://github.com/hathach/tinyusb/tree/2d56dc533e45e4e91b15e93fdab5e22e964f328d/examples/host/hid_controller)
-* [Pico Battalion](https://github.com/sonik-br/pico_battalion)
-* [ogx360_t4](https://github.com/Ryzee119/ogx360_t4)
-* [Neopixel](https://github.com/adafruit/adafruit_neopixel)
-* 
-
 
 # Completed
   - Mouse and Keyboard Support
   - Emulated/Real Steel Battalion Controller Mounting
   - USB HUB Support
-  - Color Verification
+  - LED Color Verification
   - 
 # To Do
   -  Gamepad Support ([Playstation 4 Controller Support added in branch](https://github.com/quizerno/SBCFirm2040-lite/tree/ps4-controller))
   -  Flightstick Support
   -  Control Configurator
+
+
+
+
+# Repositories Used
+* [PICO-PIO-USB Host example](https://github.com/raspberrypi/pico-examples/tree/master/usb/host/host_cdc_msc_hid).
+* [TinyUSB HID Controller](https://github.com/hathach/tinyusb/tree/2d56dc533e45e4e91b15e93fdab5e22e964f328d/examples/host/hid_controller)
+* [Pico Battalion](https://github.com/sonik-br/pico_battalion)
+* [ogx360_t4](https://github.com/Ryzee119/ogx360_t4)
+* [Neopixel](https://github.com/adafruit/adafruit_neopixel)
+  
