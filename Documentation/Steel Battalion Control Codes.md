@@ -59,12 +59,12 @@ steel_battalion_in_reportt.dButtons.MainWeapon = 0 //not pressed
 **Gear Lever**<br/>
 Values are 7 to 13
 
-Referenced via ```steel_battalion_out_report.gearLever = integer```
+Referenced via ```steel_battalion_in_report.gearLever = integer```
 ```
 int8_t gearLever;        //7-13 is gears R,N,1,2,3,4,5
 
 //Example Usage
-steel_battalion_out_report.gearLever = (int) 10; //setting the Gear to 2
+steel_battalion_in_report.gearLever = (int) 10; //setting the Gear to 2
 ```
 
 **Tuner Dial**<br/>
@@ -74,7 +74,7 @@ Referenced via ```steel_battalion_out_report.tunerDial = integer```
 ```
 int8_t tunerDial;        //0-15 is from 9oclock, around clockwise
 //Example Usage
-steel_battalion_out_report.tunerDial = (int) 9; //setting the dial to 9th position
+steel_battalion_in_report.tunerDial = (int) 9; //setting the dial to 9th position
 
 ```
 
@@ -93,7 +93,7 @@ steel_battalion_out_report.aimingY = ; //Y position
 ```
 
 **Rotation (Left Joystick)**<br/>
-Referenced via ```steel_battalion_out_report.rotationLever =```
+Referenced via ```steel_battalion_in_report.rotationLever =```
 ```
 int16_t rotationLever; // -32768 (Left) to 32767 (Right), needs to recenter to zero otherwise will always be active
 
@@ -107,7 +107,8 @@ int16_t rotationLever; // -32768 (Left) to 32767 (Right), needs to recenter to z
     }
 ```
 **Camera (Left Hatstick)**<br/>
-Referenced via ```steel_battalion_out_report.INPUT_HERE =```
+Referenced via ```steel_battalion_in_report.INPUT_HERE =```
+This should not be confused with the sightChange BUTTON which recenters the camera.
 See binding notes for information on axis coordination.
 ```
 int16_t sightChangeX;
@@ -115,7 +116,7 @@ int16_t sightChangeY;
 ```
 
 **Analog Pedals**<br/>
-Referenced via ```steel_battalion_out_report.INPUT_HERE =```
+Referenced via ```steel_battalion_in_report.INPUT_HERE =```
 See binding notes for information on analog pressure.
 ```
 	uint16_t leftPedal;      //Sidestep, 0x0000 to 0xFF00
