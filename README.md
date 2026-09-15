@@ -6,9 +6,17 @@ the stock [PICO-PIO-USB Host example](https://github.com/raspberrypi/pico-exampl
 
 For disclosure. It is very crudely built with lots of vibecoding and bug testing via AI assistance. I had attempted to use several barebones examples of the host driver and try to get this working myself. But kept running into problems with dependencies and understanding how the configuration settings worked.
 
+### Hardware
+
+* 1 x Raspberry Pi Pico (RP2040)
+* 1 x USB Host Board or Host Cable
+* 1 x WS2812 LEDs - Optional but very helpful for troubleshooting
+* 1 x Powered USB HUB - Needed if connecting more than one Device
+
+
 ### Wiring the Host Cable
 
-**Notes:** I have only tested this with a regular PICO, using more than two devices requires a powered USB HUB
+**Notes:** I have only tested this with a regular PICO
 
 [GP2040 example](https://gp2040-ce.info/controller-build/usb-host/)
 [OGX Mini example](https://github.com/MegaCadeDev/OGX-Mini-2026/tree/master/hardware)
