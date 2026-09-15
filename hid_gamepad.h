@@ -40,4 +40,5 @@ bool parse_ps4_controller(uint8_t const* report, uint16_t len, generic_gamepad_d
 bool parse_generic_hid_gamepad(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data);
 bool parse_logitech_dual_action(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data);
 bool parse_steel_battalion_native(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data);
+bool parse_generic_joystick_interface(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data);
 #endif // HID_GAMEPAD_H

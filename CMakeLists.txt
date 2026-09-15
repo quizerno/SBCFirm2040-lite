@@ -35,10 +35,9 @@ add_subdirectory(${TUSB_GAMEPAD_ROOT})
 # Add pico_pio_usb subdirectory to build its state-machines
 add_subdirectory(${PICO_PIO_USB_ROOT})
 
-target_include_directories(tusb_gamepad PRIVATE ${CMAKE_CURRENT_LIST_DIR})
+target_include_directories(tusb_gamepad PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 target_include_directories(tusb_gamepad PUBLIC ${CMAKE_CURRENT_LIST_DIR}/lib/tinyusb/src)
 target_include_directories(tusb_gamepad PUBLIC ${CMAKE_CURRENT_LIST_DIR}/lib/tinyusb/hw)
-
 set(SOURCES 
     ${CMAKE_CURRENT_LIST_DIR}/main.c 
     ${CMAKE_CURRENT_LIST_DIR}/led.c 
@@ -48,6 +47,11 @@ set(SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/hid_kbm.c
 	${CMAKE_CURRENT_SOURCE_DIR}/hid_gamepad.c    
 	${CMAKE_CURRENT_SOURCE_DIR}/device_profiles.h
+	${CMAKE_CURRENT_SOURCE_DIR}/neopixel.c
+	${CMAKE_CURRENT_SOURCE_DIR}/usb_host_callbacks.c
+	${CMAKE_CURRENT_SOURCE_DIR}/sbc_host.c
+	#${CMAKE_CURRENT_SOURCE_DIR}/tusb_xinput/xinput_host.c
+	#/lib/tinyusb/src/class/
 )
 
 # Rest of your project
@@ -64,9 +68,11 @@ endif()
 
 target_include_directories(${NAME} PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/lib/tinyusb/src
+	#${CMAKE_CURRENT_LIST_DIR}/lib/tinyusb/src/host
     ${CMAKE_CURRENT_LIST_DIR}/lib/tinyusb/hw
     ${CMAKE_CURRENT_LIST_DIR}
     ${PICO_PIO_USB_ROOT}/src
+#	${CMAKE_CURRENT_LIST_DIR}/tusb_xinput
     ${PICO_PIO_USB_ROOT}
 )
 
@@ -93,11 +99,15 @@ target_link_libraries(${NAME}
 )
 
 # # Ensure output is sent to physical UART pins (Pins 1 & 2)
-# pico_enable_stdio_uart(steel_battalion_controller_fw 1)
+ #pico_enable_stdio_uart(steel_battalion_controller_fw 1)
 
 # # Ensure output is NOT captured by the USB port
 # pico_enable_stdio_usb(steel_battalion_controller_fw 0)
 
+# target_compile_definitions(steel_battalion_controller_fw PRIVATE
+    # PICO_DEFAULT_UART_TX_PIN=4
+    # PICO_DEFAULT_UART_RX_PIN=5
+# )
 
 # Create map/bin/hex/uf2 file in addition to ELF
 pico_add_extra_outputs(${NAME})

@@ -69,7 +69,7 @@ static void debug_dump_raw_report(uint8_t const* report, uint16_t len, const cha
  * Parses native Steel Battalion data streams.
  * Direct-maps specialized controls without intermediate gamepad conversion errors.
  */
-bool parse_steel_battalion_native(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data) {
+/* bool parse_steel_battalion_native(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data) {
     // Structural envelope safety assertion
     if (len < sizeof(steel_battalion_native_report_t)) {
         printf("[WARN] SB Native packet payload undersized: Got %d bytes, expected %d\n", len, sizeof(steel_battalion_native_report_t));
@@ -100,7 +100,85 @@ bool parse_steel_battalion_native(uint8_t const* report, uint16_t len, generic_g
     // printf("[SB-NATIVE LIVE] Aim X: %4d | Aim Y: %4d | Pedals Accel: %3d\n", sb_raw.aiming_x, sb_raw.aiming_y, sb_raw.accelerator_pedal);
 
     return true; 
+} */
+
+/**
+ * Parses native Steel Battalion data streams.
+ * Direct-maps specialized controls and dynamically adapts to packet offset variants.
+ */
+/* bool parse_steel_battalion_native(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data) {
+    uint8_t const* payload_ptr = report;
+    uint16_t expected_size = sizeof(steel_battalion_native_report_t);
+
+    // Defensive check: If the packet has a Report ID prefix, shift our pointer forward by 1 byte
+    if (len == expected_size + 1) {
+        payload_ptr = &report[1];
+    } else if (len < expected_size) {
+        printf("[WARN] SB Native packet payload undersized: Got %d bytes, expected %d\n", len, expected_size);
+        return false;
+    }
+
+    steel_battalion_native_report_t sb_raw;
+    memcpy(&sb_raw, payload_ptr, expected_size);
+
+    // Clear structural targets safely 
+    memset(out_data, 0, sizeof(generic_gamepad_data_t));
+    out_data->hat = 8; // Maintain default idle release state marker
+
+    // 1. Forward raw analog components directly to target registers
+    // Downscale 16-bit inputs into generic 8-bit envelopes by shifting out noisy bits
+    out_data->lx = (int8_t)(sb_raw.aiming_x >> 8);
+    out_data->ly = (int8_t)(sb_raw.aiming_y >> 8);
+    out_data->rx = (int8_t)(sb_raw.sight_change_x >> 8);
+    out_data->ry = (int8_t)(sb_raw.sight_change_y >> 8);
+
+    // 2. Combine foot elements into a singular analog trigger channel
+    out_data->z_trigger = (int16_t)sb_raw.accelerator_pedal - (int16_t)sb_raw.brake_pedal;
+
+    // 3. Map digital bits cleanly into uniform output spaces
+    out_data->buttons = sb_raw.buttons_block1;
+
+    return true; 
 }
+ */
+ 
+ bool parse_steel_battalion_native(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data) {
+    uint8_t const* payload_ptr = report;
+    uint16_t expected_size = sizeof(steel_battalion_native_report_t);
+
+    if (len == expected_size + 1) {
+        payload_ptr = &report[1];
+    } else if (len < expected_size) {
+        return false;
+    }
+
+    steel_battalion_native_report_t sb_raw;
+    memcpy(&sb_raw, payload_ptr, expected_size);
+
+    memset(out_data, 0, sizeof(generic_gamepad_data_t));
+    out_data->hat = 8; 
+
+    // =================================================================
+    // NATIVE ENVELOPE TRANSLATION CORRECTION
+    // =================================================================
+    // If the Arduino mimics standard XInput configurations, the values 
+    // are already structured signed values. If they arrive as raw 8-bit 
+    // configurations, map them into the generic container cleanly:
+    out_data->lx = (int8_t)(sb_raw.aiming_x & 0xFF) - 128;
+    out_data->ly = (int8_t)(sb_raw.aiming_y & 0xFF) - 128;
+    out_data->rx = (int8_t)(sb_raw.sight_change_x & 0xFF) - 128;
+    out_data->ry = (int8_t)(sb_raw.sight_change_y & 0xFF) - 128;
+
+    // 2. Extract Pedal Array Pressures
+    out_data->z_trigger = (int16_t)sb_raw.accelerator_pedal - (int16_t)sb_raw.brake_pedal;
+
+    // 3. Map Digital Flags Map
+    out_data->buttons = sb_raw.buttons_block1;
+
+    return true; 
+}
+
+
 
 
 bool parse_ps4_controller(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data) {
@@ -231,7 +309,7 @@ bool parse_generic_hid_gamepad(uint8_t const* report, uint16_t len, generic_game
  * Automated System Router: Identifies connected equipment descriptors,
  * applies profiling parameters, and dumps telemetry cleanly over the UART console.
  */
-bool route_and_parse_gamepad(uint8_t const* report, uint16_t len, uint8_t dev_addr, generic_gamepad_data_t* out_data) {
+/* bool route_and_parse_gamepad(uint8_t const* report, uint16_t len, uint8_t dev_addr, generic_gamepad_data_t* out_data) {
     uint16_t vid = 0, pid = 0;
     tuh_vid_pid_get(dev_addr, &vid, &pid);
 
@@ -267,4 +345,145 @@ bool route_and_parse_gamepad(uint8_t const* report, uint16_t len, uint8_t dev_ad
         default:
             return parse_generic_hid_gamepad(report, len, out_data);
     }
+} */
+
+/* bool route_and_parse_gamepad(uint8_t const* report, uint16_t len, uint8_t dev_addr, generic_gamepad_data_t* out_data) {
+    uint16_t vid = 0, pid = 0;
+    tuh_vid_pid_get(dev_addr, &vid, &pid);
+
+    // FORCE DIRECT OVERRIDE: Check for your emulated Steel Battalion controllers immediately
+    if ((vid == 0x0A7B && pid == 0xD000) || (vid == 0x045E && pid == 0x0289)) {
+        return parse_steel_battalion_native(report, len, out_data);
+    }
+
+    // Otherwise, maintain normal lookup rules for your commercial pads
+    gamepad_profile_id_t active_profile = PROFILE_GENERIC_HID;
+    for (size_t i = 0; i < GAMEPAD_REGISTRY_COUNT; i++) {
+        if (GAMEPAD_REGISTRY[i].vid == vid && GAMEPAD_REGISTRY[i].pid == pid) {
+            active_profile = GAMEPAD_REGISTRY[i].profile_id;
+            break;
+        }
+    }
+
+    switch (active_profile) {
+        case PROFILE_SONY_DS4:
+            return parse_ps4_controller(report, len, out_data);
+        case PROFILE_LOGITECH_DUAL_ACTION:
+            return parse_logitech_dual_action(report, len, out_data);
+        case PROFILE_GENERIC_HID:
+        default:
+            return parse_generic_hid_gamepad(report, len, out_data);
+    }
 }
+ */
+ 
+/*  bool route_and_parse_gamepad(uint8_t const* report, uint16_t len, uint8_t dev_addr, generic_gamepad_data_t* out_data) {
+    uint16_t vid = 0, pid = 0;
+    tuh_vid_pid_get(dev_addr, &vid, &pid); // Safe to run on Core 0 thread context here!
+
+    // DIRECT INTERCEPT: Route your emulated Steel Battalion controllers immediately
+    if ((vid == 0x0A7B && pid == 0xD000) || (vid == 0x045E && pid == 0x0289)) {
+        return parse_steel_battalion_native(report, len, out_data);
+    }
+
+    // Maintain normal lookup rules for your commercial pads
+    gamepad_profile_id_t active_profile = PROFILE_GENERIC_HID;
+    for (size_t i = 0; i < GAMEPAD_REGISTRY_COUNT; i++) {
+        if (GAMEPAD_REGISTRY[i].vid == vid && GAMEPAD_REGISTRY[i].pid == pid) {
+            active_profile = GAMEPAD_REGISTRY[i].profile_id;
+            break;
+        }
+    }
+
+    switch (active_profile) {
+        case PROFILE_SONY_DS4:
+            return parse_ps4_controller(report, len, out_data);
+        case PROFILE_LOGITECH_DUAL_ACTION:
+            return parse_logitech_dual_action(report, len, out_data);
+        case PROFILE_GENERIC_HID:
+        default:
+            return parse_generic_hid_gamepad(report, len, out_data);
+    }
+} */
+
+
+bool route_and_parse_gamepad(uint8_t const* report, uint16_t len, uint8_t dev_addr, generic_gamepad_data_t* out_data) {
+    uint16_t vid = 0, pid = 0;
+    tuh_vid_pid_get(dev_addr, &vid, &pid); // Safe to run on Core 0 thread context here!
+
+    // DIRECT INTERCEPT: Route your emulated Steel Battalion controllers immediately
+    if ((vid == 0x0A7B && pid == 0xD000) || (vid == 0x045E && pid == 0x0289)) {
+        return parse_steel_battalion_native(report, len, out_data);
+    }
+
+    // Maintain normal lookup rules for your commercial pads
+    gamepad_profile_id_t active_profile = PROFILE_GENERIC_HID;
+    bool found_in_registry = false;
+
+    for (size_t i = 0; i < GAMEPAD_REGISTRY_COUNT; i++) {
+        if (GAMEPAD_REGISTRY[i].vid == vid && GAMEPAD_REGISTRY[i].pid == pid) {
+            active_profile = GAMEPAD_REGISTRY[i].profile_id;
+            found_in_registry = true;
+            break;
+        }
+    }
+
+
+    // Replace the bottom section of route_and_parse_gamepad with this:
+    switch (active_profile) {
+        case PROFILE_SONY_DS4:
+            return parse_ps4_controller(report, len, out_data);
+            
+        case PROFILE_LOGITECH_DUAL_ACTION:
+            return parse_logitech_dual_action(report, len, out_data);
+            
+        case PROFILE_GENERIC_HID:
+        default:
+            return parse_generic_hid_gamepad(report, len, out_data);
+    }
+
+}
+
+
+
+/**
+ * Unpacks standard, generic baseline USB HID Joysticks (Usage 0x05 / Gamepads).
+ * Extracts raw coordinate axes stream arrays and pushes them to standard formats.
+ */
+bool parse_generic_joystick_interface(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data) {
+    if (len < 3) return false;
+
+    // Detect if multi-profile composite framing shifted our array columns by 1 byte
+    uint8_t offset = 0;
+    if (len > 4 && report[0] <= 5) { 
+        offset = 1;
+    }
+
+    // 1. Unpack default directional coordinate fields with your dynamic offset bounds
+    out_data->lx = (int16_t)report[0 + offset] - 128;
+    out_data->ly = (int16_t)report[1 + offset] - 128;
+    
+    out_data->rx = (len - offset >= 3) ? ((int16_t)report[2 + offset] - 128) : 0;
+    out_data->ry = (len - offset >= 4) ? ((int16_t)report[3 + offset] - 128) : 0;
+    out_data->z_trigger = 0;
+
+    // 2. Unpack Directional POV Hat Switch if embedded inside index byte 4
+    if (len - offset >= 5) {
+        uint8_t hat_raw = report[4 + offset] & 0x0F;
+        out_data->hat = (hat_raw > 7) ? 8 : hat_raw; 
+    } else {
+        out_data->hat = 8;
+    }
+
+    // 3. Extract Digital Action Matrix bits safely across indices 5 and 6
+    out_data->buttons = 0;
+    if (len - offset >= 6) out_data->buttons |= ((uint32_t)report[5 + offset]);
+    if (len - offset >= 7) out_data->buttons |= ((uint32_t)report[6 + offset] << 8);
+
+    out_data->tpad_packets = 0;
+    out_data->finger_active = false;
+
+    return true;
+}
+
+

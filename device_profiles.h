@@ -25,8 +25,12 @@ typedef struct {
 
 // Central Look-Up Registry for Hardware Identification Tracking
 static const gamepad_device_id_t GAMEPAD_REGISTRY[] = {
+	// === CUSTOM HID ===
+	//{0x16C0, 0x0482, PROFILE_GENERIC_JOYSTICK, 		"Custom HID",	"Teensy HID Device"},
+	
     // === NATIVE EMULATED SIMULATION GEAR ===
-    { 0x0A7B, 0xD000, PROFILE_STEEL_BATTALION,     "Simulation",   "Emulated Steel Battalion Controller" },
+    { 0x0A7B, 0xD000, PROFILE_STEEL_BATTALION,     "Simulation",   "Steel Battalion Controller" },
+//	{ 0x045E, 0x0289, PROFILE_STEEL_BATTALION,     "Simulation",   "Arduino Pro Micro Emulating SB Controller (using the same VID/PID as OG Xbox S Controller)" }, 
 
     // === SONY CONSOLES ===
     { 0x054C, 0x05C4, PROFILE_SONY_DS4,            "Gamepad",      "Sony DualShock 4 V1" },

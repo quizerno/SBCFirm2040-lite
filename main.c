@@ -1,11 +1,13 @@
 
+#include "class/sbc/sbc_host.h"
 #include "device_profiles.h"
-#include "tusb_gamepad.h"  // <--- ADD THIS LINE HERE TO DEFINE THE GAMEPAD TYPE
+#include "tusb_gamepad.h"  
 #include "input_mapping.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <math.h>           
+#include <math.h>
+#include "host/usbh_pvt.h" // Needed for usbh_class_driver_t           
 
 #include "pico/stdlib.h"
 #include "pico/multicore.h" 
@@ -16,76 +18,20 @@
 #include "pio_usb.h"        
 #include "tusb.h"
 
-// Segregated driver hooks (Pure parsing only, no Steel Battalion logic inside)
 #include "hid_kbm.h"
 #include "hid_gamepad.h"
-#include "input_mapping.h"
+#include "neopixel.h"
+#include "usb_host_callbacks.h" // Include modular host callback structures
 
 #define HOST_PIN_DP 0 
 #define PICO_LED_PIN 25 
 #define QUEUE_DEPTH 8
 #define MOUSE_SENSITIVITY 45
+#define fireButtonPin 15
 
-// Global accumulation frames and timing tracking metrics
 int32_t accumulated_aim_x = 32767;
 int32_t accumulated_aim_y = 32767;
-int t = 0; // State execution cycle timer metric
-
-/**
- * Calculates a smooth relative delta value for a trackpad axis.
- * Protects memory across empty queue frames.
- */
-int16_t calculate_relative_axis(uint16_t current_pos, uint16_t* last_pos, bool finger_active, bool packet_fresh) {
-    static bool was_touching = false;
-    int32_t output_delta = 0;
-    
-    // Sensitivity Scaling Multiplier (Adjust this to fine-tune camera tracking speed)
-    const int32_t sensitivity = 450; 
-
-    // We ONLY update calculations when a fresh USB packet actually arrives
-    if (packet_fresh) {
-        if (finger_active) {
-            if (was_touching) {
-                // Compute the signed physical distance traveled since the last packet
-                int16_t raw_delta = (int16_t)current_pos - (int16_t)(*last_pos);
-
-                // Defensive Jitter Deadzone: Discard minor electrical tracking noise (1-2 pixels)
-                if (abs(raw_delta) >= 2) {
-                    output_delta = raw_delta * sensitivity;
-                }
-            }
-            // Lock in this coordinate as the historical baseline anchor for the next packet
-            *last_pos = current_pos;
-            was_touching = true;
-        } else {
-            was_touching = false;
-        }
-    }
-
-    // Clamp parameters cleanly into the Steel Battalion signed 16-bit range (-32767 to 32767)
-    if (output_delta > 32767)  output_delta = 32767;
-    if (output_delta < -32767) output_delta = -32767;
-
-    return (int16_t)output_delta;
-}
-
-
-
-typedef struct {
-    uint8_t dev_addr;
-    uint8_t instance;
-    bool    needs_activation;
-    uint8_t usage_id;  
-} ActiveHidDevice_t;
-
-volatile ActiveHidDevice_t device_activation_queue[3] = {0};
-
-typedef struct {
-    uint8_t report[64];
-    uint16_t len;
-    uint8_t usage_id;
-    uint8_t dev_addr;
-} usb_packet_t;
+int t = 0; 
 
 queue_t gamepad_packet_queue;
 void apply_inputs_to_steel_battalion(Gamepad *gp, generic_gamepad_data_t const* pad_data, bool dynamic_pad_active);
@@ -96,12 +42,19 @@ int main(void) {
     sleep_ms(10); 
     stdio_init_all();
     
+    neopixel_init();
+    neopixel_set_color(20, 20, 20);	
+	
     queue_init(&gamepad_packet_queue, sizeof(usb_packet_t), QUEUE_DEPTH);
 
     gpio_init(PICO_LED_PIN);
     gpio_set_dir(PICO_LED_PIN, GPIO_OUT);
     gpio_set_pulls(HOST_PIN_DP, false, true);     
     gpio_set_pulls(HOST_PIN_DP + 1, false, true); 
+	
+    gpio_init(fireButtonPin);
+    gpio_set_dir(fireButtonPin, GPIO_IN);
+    gpio_pull_up(fireButtonPin); 
 
     init_tusb_gamepad(INPUT_MODE_XBOXORIGINAL);
     multicore_reset_core1();
@@ -114,10 +67,7 @@ int main(void) {
     generic_gamepad_data_t local_joy_data = {0};
     bool gamepad_activity = false;
 
-//bool persistent_touch_active = false;
-
     while (1) {
-        // 1. Snapshot global inputs into local registers instantly
         local_modifiers     = global_modifiers;
         for (int i = 0; i < 6; i++) local_keycodes[i] = global_keycodes[i];
         local_mouse_buttons = global_mouse_buttons;
@@ -125,20 +75,16 @@ int main(void) {
         local_mouse_y       = global_mouse_y;
         local_mouse_wheel   = global_mouse_wheel;
 
-        // 2. Clear global states exactly ONCE for the next core1 interrupt window
         global_mouse_x = 0; 
         global_mouse_y = 0; 
         gamepad_activity = false;
         global_mouse_wheel = 0;
 
-        // 3. Clear local frame structures safely 
         memset(&local_joy_data, 0, sizeof(generic_gamepad_data_t));
-        local_joy_data.hat = 8; // Default hat to idle release
+        local_joy_data.hat = 8; 
 
-        // 4. Check for incoming gamepad packets from Core 1
         usb_packet_t pkt;
         if (queue_try_remove(&gamepad_packet_queue, &pkt)) {
-            // High-level modular call hides routing switches and identity processing entirely
             bool parsed_ok = route_and_parse_gamepad(pkt.report, pkt.len, pkt.dev_addr, &local_joy_data);
 
             if (parsed_ok) {
@@ -152,14 +98,14 @@ int main(void) {
             }
         }
 
-        // --- CONSOLIDATED STEEL BATTALION MAPPING MACHINE ---
         apply_inputs_to_steel_battalion(gp, &local_joy_data, gamepad_activity);
 
-        // 5. System status LED indicators
         bool key_active = false;
         for (int i = 0; i < 6; i++) { if (local_keycodes[i] != 0) { key_active = true; break; } }
-        // Include mouse movement as a valid reason to turn on the LED indicator
-        if (key_active || local_modifiers != 0 || local_mouse_buttons != 0 || local_mouse_x != 0 || local_mouse_y != 0 || gamepad_activity) {
+		bool mouse_active = local_mouse_buttons != 0 || local_mouse_x != 0 || local_mouse_y != 0 || local_mouse_wheel != 0;
+		bool GPIOActive = (gpio_get(fireButtonPin) == 0);
+		
+        if (key_active || local_modifiers != 0 || mouse_active || gamepad_activity || GPIOActive) {
             gpio_put(PICO_LED_PIN, 1);
         } else {
             gpio_put(PICO_LED_PIN, 0);
@@ -168,82 +114,45 @@ int main(void) {
         tusb_gamepad_task();
         tud_task(); 
     }
-//end of while
     return 0;
 }
 
 void apply_inputs_to_steel_battalion(Gamepad *gp, generic_gamepad_data_t const* pad_data, bool dynamic_pad_active) {
-    // 1. Wipe old state payload bits out cleanly before frame refresh passes
     memset(&gp->steel_battalion_in_report.dButtons, 0, sizeof(gp->steel_battalion_in_report.dButtons));
-
-/*     if (pad_data->finger_active) {
-        // 1. Normalize down to an accurate percentage ratio (0.0 to 1.0) using correct max bounds
-        float ratio_x = (float)pad_data->finger_x / 1919.0f;
-        float ratio_y = (float)pad_data->finger_y / 941.0f; // Fixed vertical height boundary
-        
-        // 2. Scale cleanly into the full unsigned 16-bit range (0 to 65535) expected by the emulator
-        uint16_t scaled_sight_x = (uint16_t)(ratio_x * 65535.0f);
-        uint16_t scaled_sight_y = (uint16_t)(ratio_y * 65535.0f);
-        
-        // 3. Assign the integer outputs safely
-        gp->steel_battalion_in_report.sightChangeX = scaled_sight_x;
-        gp->steel_battalion_in_report.sightChangeY = scaled_sight_y;
-    } */
 	
-	
-	if (pad_data->hat == 0)   gp->steel_battalion_in_report.sightChangeY = -8000;
+    if (pad_data->hat == 0)   gp->steel_battalion_in_report.sightChangeY = -8000;
     if (pad_data->hat == 4)   gp->steel_battalion_in_report.sightChangeY = 8000;
-	if (pad_data->hat == 2)	  gp->steel_battalion_in_report.sightChangeX = 8000;
+    if (pad_data->hat == 2)	  gp->steel_battalion_in_report.sightChangeX = 8000;
     if (pad_data->hat == 6)	  gp->steel_battalion_in_report.sightChangeY = -8000;
 	
-	
-/* 	    // 2. Memory anchors that live safely across loop passes (protected from your memset zone)
-    static uint16_t track_history_x = 0;
-    static uint16_t track_history_y = 0;
-
-    // 3. Compute relative movement smoothly via our decoupled helper function
-    gp->steel_battalion_in_report.sightChangeX = calculate_relative_axis(
-        pad_data->finger_x, 
-        &track_history_x, 
-        pad_data->finger_active, 
-        dynamic_pad_active
-    );
-
-    gp->steel_battalion_in_report.sightChangeY = calculate_relative_axis(
-        pad_data->finger_y, 
-        &track_history_y, 
-        pad_data->finger_active, 
-        dynamic_pad_active
-    ); */
-	
-	
-	
-	
-    // 2. Keyboard Rotation Lever Mapping
     if (is_key_pressed(KEY_A)) gp->steel_battalion_in_report.rotationLever = -32768; 
     else if (is_key_pressed(KEY_D)) gp->steel_battalion_in_report.rotationLever = 32767;  
     else gp->steel_battalion_in_report.rotationLever = 0;      
 
-    // 3. Mouse Integration Processing Calculations
     accumulated_aim_x += (local_mouse_x * MOUSE_SENSITIVITY);
     accumulated_aim_y += (local_mouse_y * MOUSE_SENSITIVITY);
+	
+	if(gpio_get(fireButtonPin)==0){
+	    gp->steel_battalion_in_report.dButtons.MainWeapon = true;
+	}
 
-    // 4. Overlap Analog Stick Data if a Hardware Gamepad is Actively Pushed
-    // 4. Overlap Analog Stick Data if a Hardware Gamepad is Actively Pushed
     if (dynamic_pad_active) {
-        // Defensive filtering checks using Left Stick coordinates
-        int8_t fx = (abs(pad_data->lx) > 15) ? pad_data->lx : 0;
-        int8_t fy = (abs(pad_data->ly) > 15) ? pad_data->ly : 0;
+        int16_t fx = pad_data->lx;
+        int16_t fy = pad_data->ly;
+        int16_t rx = pad_data->rx;
+        int16_t ry = pad_data->ry;
         
         gp->steel_battalion_in_report.aimingX = (uint16_t)((fx + 128) << 8);
         gp->steel_battalion_in_report.aimingY = (uint16_t)((fy + 128) << 8);
         
-        // Gamepad direct button overrides mapped onto structural masks
-        if (pad_data->buttons & (1 << 0)) gp->steel_battalion_in_report.dButtons.MainWeapon = true; // Cross
-        if (pad_data->buttons & (1 << 1)) gp->steel_battalion_in_report.dButtons.Fire       = true; // Circle
-	    if (pad_data->buttons & (1 << 3)) gp->steel_battalion_in_report.dButtons.LockOn       = true; // Triangle
-    } else {
-        // Keyboard mapping fallback configurations
+        gp->steel_battalion_in_report.sightChangeX = (uint16_t)((rx + 128) << 8);
+        gp->steel_battalion_in_report.sightChangeY = (uint16_t)((ry + 128) << 8);
+        
+        if (pad_data->buttons & (1 << 0)) gp->steel_battalion_in_report.dButtons.MainWeapon = true; 
+        if (pad_data->buttons & (1 << 1)) gp->steel_battalion_in_report.dButtons.Fire       = true; 
+        if (pad_data->buttons & (1 << 3)) gp->steel_battalion_in_report.dButtons.LockOn       = true; 
+        
+    } else {		
         if (is_key_pressed(KEY_RIGHT)) accumulated_aim_x = 65535;
         else if (is_key_pressed(KEY_LEFT)) accumulated_aim_x = 0;
 
@@ -260,33 +169,23 @@ void apply_inputs_to_steel_battalion(Gamepad *gp, generic_gamepad_data_t const* 
         gp->steel_battalion_in_report.dButtons.Fire       = is_mouse_pressed(MOUSE_BUTTON_RIGHT);
     }
 
-    // 5. System Controls Mapping (Consistent across devices)
-	gp->steel_battalion_in_report.dButtons.CockpitHatch    = is_key_pressed(KEY_P);
-
+    gp->steel_battalion_in_report.dButtons.CockpitHatch    = is_key_pressed(KEY_P);
     gp->steel_battalion_in_report.dButtons.Eject    = is_key_pressed(KEY_SPACE);
     gp->steel_battalion_in_report.dButtons.Ignition = is_key_pressed(KEY_I);
     gp->steel_battalion_in_report.dButtons.Start    = is_key_pressed(KEY_ENTER);
 
     gp->steel_battalion_in_report.dButtons.ToggleFiltControl    = is_key_pressed(KEY_1);
     gp->steel_battalion_in_report.dButtons.ToggleOxygenSupply    = is_key_pressed(KEY_2);
-	gp->steel_battalion_in_report.dButtons.ToggleFuelFlowRate    = is_key_pressed(KEY_3);
+    gp->steel_battalion_in_report.dButtons.ToggleFuelFlowRate    = is_key_pressed(KEY_3);
     gp->steel_battalion_in_report.dButtons.ToggleBufferMaterial    = is_key_pressed(KEY_4);
     gp->steel_battalion_in_report.dButtons.ToggleVTLocation    = is_key_pressed(KEY_5);
     gp->steel_battalion_in_report.dButtons.Function1    = is_key_pressed(KEY_L);
-	
 
     if ((local_modifiers & KEY_MOD_LSHIFT) && is_key_pressed(KEY_E)) {
         gp->steel_battalion_in_report.dButtons.CockpitHatch = true;
     }
-
-    // 6. Increment Time Vector Tracking Metric
     t++;
 }
-
-// Keep core1_usb_host_entry(), tuh_hid_mount_cb() hub logic below...
-// =========================================================================
-// CORE 1: ASYNCHRONOUS USB HOST PACKET HARVESTER
-// =========================================================================
 
 void core1_usb_host_entry() {
     sleep_ms(10);
@@ -297,96 +196,62 @@ void core1_usb_host_entry() {
     tusb_rhport_init_t const host_init_config = {.role = TUSB_ROLE_HOST};
     tusb_init(BOARD_HOST_RHPORT_NUM, &host_init_config);
 
+    uint32_t led_timer = 0;
+    bool led_is_active = false;
+
     while (1) {
-        tuh_task();
+        tuh_task(); 
+        uint32_t now = to_ms_since_boot(get_absolute_time());
+
         for (int i = 0; i < 3; i++) {
             if (device_activation_queue[i].needs_activation) {
                 tuh_hid_receive_report(device_activation_queue[i].dev_addr, device_activation_queue[i].instance);
+                gpio_put(PICO_LED_PIN, 1);
+                led_timer = now;
+                led_is_active = true;
                 device_activation_queue[i].needs_activation = false;
             }
         }
-    }
-}
 
-// Helper routine to look up Sony DualShock 4 signatures
-static inline bool check_sony_device(uint8_t dev_addr) {
-    uint16_t vid, pid; 
-    tuh_vid_pid_get(dev_addr, &vid, &pid);
-    return (vid == 0x054c && (pid == 0x09cc || pid == 0x05c4));
-}
-
-// TinyUSB callback: Triggered when an HID device is attached
-void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_report, uint16_t desc_len) {
-    uint8_t const itf_protocol = tuh_hid_interface_protocol(dev_addr, instance);
-    uint8_t usage_id = 0;
-
-    if (check_sony_device(dev_addr)) {
-        usage_id = 0x99; // Custom identification tag for PS4/DS4
-    } else if (itf_protocol == HID_ITF_PROTOCOL_NONE) {
-        tuh_hid_report_info_t report_info[3]; 
-        uint8_t report_count = tuh_hid_parse_report_descriptor(report_info, 3, desc_report, desc_len);
-        
-        for (uint8_t i = 0; i < report_count; i++) {
-            if (report_info[i].usage_page == 0x01) { // Generic Desktop Page
-                if (report_info[i].usage == 0x02) {
-                    usage_id = HID_ITF_PROTOCOL_MOUSE; // Explicitly treat as Mouse (2)
-                    break;
-                } else if (report_info[i].usage == 0x04 || report_info[i].usage == 0x05) {
-                    usage_id = report_info[i].usage; // Joysticks / Gamepads
-                    break;
-                }
-            }
-        }
-    } else {
-        usage_id = itf_protocol; // Standard Keyboard (1) or Mouse (2) fallback
-    }
-
-    if (usage_id == 0) return;
-
-    // Place the detected device into an open hardware slot
-    for (int i = 0; i < 3; i++) {
-        if (device_activation_queue[i].dev_addr == 0) {
-            device_activation_queue[i].dev_addr = dev_addr;
-            device_activation_queue[i].instance = instance;
-            device_activation_queue[i].usage_id = usage_id; 
-            device_activation_queue[i].needs_activation = true; 
-            break;
+        if (led_is_active && (now - led_timer >= 1000)) {
+            gpio_put(PICO_LED_PIN, 0);
+            led_is_active = false;
         }
     }
 }
 
+// Modern TinyUSB dynamic driver injection callback
+/* void usbh_app_driver_get_cb(usbh_class_driver_t const** driver_t, uint8_t* count) 
+{
+    static usbh_class_driver_t const custom_driver = {
+        #if CFG_TUSB_DEBUG >= 2
+        .name       = "SBC",
+        #endif
+        .init       = sbch_init,
+        .open       = sbch_open,
+        .set_config = sbch_set_config,
+        .xfer_cb    = sbch_xfer_cb,
+        .close      = sbch_close
+    };
 
-// TinyUSB callback: Triggered when an HID device is pulled out
-void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance) {
-    for (int i = 0; i < 3; i++) {
-        if (device_activation_queue[i].dev_addr == dev_addr && device_activation_queue[i].instance == instance) {
-            memset((void*)&device_activation_queue[i], 0, sizeof(ActiveHidDevice_t));
-            break;
-        }
-    }
-}
+    *driver_t = &custom_driver;
+    *count = 1;
+} */
 
-// TinyUSB callback: Triggered when an HID interrupt report packet arrives
-void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* report, uint16_t len) {
-    uint8_t usage = 0;
-    for (int i = 0; i < 3; i++) {
-        if (device_activation_queue[i].dev_addr == dev_addr && device_activation_queue[i].instance == instance) {
-            usage = device_activation_queue[i].usage_id; 
-            break;
-        }
-    }
+// CHANGE THIS:
+// void usbh_app_driver_get_cb(usbh_class_driver_t const** driver_t, uint8_t* count)
 
-    if (usage == HID_ITF_PROTOCOL_KEYBOARD) {
-        process_hid_keyboard(report, len);
-    } else if (usage == HID_ITF_PROTOCOL_MOUSE) {
-        process_hid_mouse(report, len);
-    } else if (usage == 0x04 || usage == 0x05 || usage == 0x99) {
-        usb_packet_t packet;
-        packet.len = (len > 64) ? 64 : len;
-        packet.usage_id = usage;
-        packet.dev_addr = dev_addr;
-        memcpy(packet.report, report, packet.len);
-        queue_try_add(&gamepad_packet_queue, &packet);
-    }
-    tuh_hid_receive_report(dev_addr, instance);
+// TO THIS:
+usbh_class_driver_t const* usbh_app_driver_get_cb(uint8_t* driver_count)
+{
+    static usbh_class_driver_t const sbc_driver = {
+        .init       = sbch_init,
+        .open       = sbch_open,
+        .set_config = sbch_set_config,
+        .xfer_cb    = sbch_xfer_cb,
+        .close      = sbch_close
+    };
+
+    *driver_count = 1;
+    return &sbc_driver;
 }
