@@ -8,20 +8,24 @@ For disclosure. It is very crudely built with lots of vibecoding and bug testing
 
 ### Hardware
 
-* 1 x Raspberry Pi Pico (RP2040)
+* 1 x Raspberry Pi Pico/RP2040
 * 1 x USB Host Board or Host Cable
-* 1 x WS2812 LEDs - Optional but very helpful for troubleshooting
+* 2 x 4.7k Ohm resistors (if using a Pico 2, but also good for safety)
+* 1 x Neopixel LED (WS2812) - Optional but very helpful for troubleshooting
 * 1 x Powered USB HUB - Needed if connecting more than one Device
 
 
-### Wiring the Host Cable
+### Wiring 
 
 **Notes:** I have only tested this with a regular PICO
 
-[GP2040 example](https://gp2040-ce.info/controller-build/usb-host/)
-[OGX Mini example](https://github.com/MegaCadeDev/OGX-Mini-2026/tree/master/hardware)
+**Host Cable** <br/>
+Follow either of the examples here
+* [GP2040 example](https://gp2040-ce.info/controller-build/usb-host/)
+* [OGX Mini example](https://github.com/MegaCadeDev/OGX-Mini-2026/tree/master/hardware)
 
-
+**Neopixel LED**<br/>
+The Pico runs on 3.3v so you will need to power the LED via the 3.3 out on the Pico.
 
 ### Set-up
 For set-up clone [pico-sdk](https://github.com/raspberrypi/pico-sdk) to your computer and export path. You may also need to download python3
@@ -54,15 +58,21 @@ info usbhost
 device_add usb-host,vendorid=0x0a7b,productid=0xd000,port=1.3 
 
 ```
-# Examples Used
+# Other Repositories Used
 * [PICO-PIO-USB Host example](https://github.com/raspberrypi/pico-examples/tree/master/usb/host/host_cdc_msc_hid).
 * [TinyUSB HID Controller](https://github.com/hathach/tinyusb/tree/2d56dc533e45e4e91b15e93fdab5e22e964f328d/examples/host/hid_controller)
+* [Pico Battalion](https://github.com/sonik-br/pico_battalion)
+* [ogx360_t4](https://github.com/Ryzee119/ogx360_t4)
+* [Neopixel](https://github.com/adafruit/adafruit_neopixel)
 * 
 
 
 # Completed
   - Mouse and Keyboard Support
+  - Emulated/Real Steel Battalion Controller Mounting
   - USB HUB Support
+  - Color Verification
+  - 
 # To Do
   -  Gamepad Support ([Playstation 4 Controller Support added in branch](https://github.com/quizerno/SBCFirm2040-lite/tree/ps4-controller))
   -  Flightstick Support
