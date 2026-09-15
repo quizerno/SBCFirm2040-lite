@@ -3,7 +3,7 @@
 
 /* #include "common/tusb_common.h" // <-- REPLACE WITH THIS
 #include "sbc_host.h"  */
-#define CFG_TUH_EXTERNAL_DRIVERS  sbc_host_driver
+//#define CFG_TUH_EXTERNAL_DRIVERS  sbc_host_driver
 #define CFG_TUH_SBC  1
 
 #ifdef __cplusplus
@@ -85,9 +85,15 @@
     { .bInterfaceClass = 0x58, .bInterfaceSubClass = 0x42, .bInterfaceProtocol = 0x01 }, \
     { .bInterfaceClass = 0x58, .bInterfaceSubClass = 0x42, .bInterfaceProtocol = 0x02 }, \
     { .bInterfaceClass = TUSB_CLASS_HID, .bInterfaceSubClass = 0x00, .bInterfaceProtocol = 0x00 } */
-#ifdef CFG_TUH_HID_CLASS_SUPPORTED_EXTRA
+	
+	
+	#define CFG_TUH_HID_CLASS_SUPPORTED_EXTRA \
+    { .bInterfaceClass = 0x58, .bInterfaceSubClass = 0x42, .bInterfaceProtocol = 0x00 }, \
+    { .bInterfaceClass = 0x58, .bInterfaceSubClass = 0x42, .bInterfaceProtocol = 0x01 }, \
+    { .bInterfaceClass = 0x58, .bInterfaceSubClass = 0x42, .bInterfaceProtocol = 0x02 }
+/* #ifdef CFG_TUH_HID_CLASS_SUPPORTED_EXTRA
 #undef CFG_TUH_HID_CLASS_SUPPORTED_EXTRA
-#endif
+#endif */
 
 	
 // =========================================================================

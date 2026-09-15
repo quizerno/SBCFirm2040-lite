@@ -1,0 +1,13 @@
+We are resuming work on the Raspberry Pi Pico (RP2040) dual-core firmware project mapping a physical Xbox Steel Battalion Controller (SBC) to an outbound emulation report engine.
+
+Active Architecture Baseline:
+1. Core 1 captures native driver packets and passes the raw memory array over the cross-core queue using an identifier signature (`pkt.usage_id = 0x80`).
+2. Core 0 pops the buffer and executes a clean `memcpy` layout pass directly into a dedicated tracking structure `local_sbc_data_t` inside `main.c`, matching the raw naming layouts (`bAimingX`, `bButtons`, `bGearLever`, etc.).
+3. Linker issues and header variable leaks are fully resolved. The project builds cleanly into the final binary.
+4. Data feeds directly into `apply_inputs_to_steel_battalion` under a dedicated `input_source == 2` native branch, perfectly separating keyboard/mouse emulation tracking fields from hardware passthrough logic.
+
+Next Session Direct Goals:
+- Audit and analyze how our 8-bit native analog input values (like `bAimingX` and `bAimingY`) map onto the outbound virtual gamepad engine properties (`gp->steel_battalion_in_report`). We need to verify if the outbound engine expects 16-bit values, left shifts, or centering offsets.
+- Audit the 64-bit button bitmask parsing array to confirm that raw physical button presses map perfectly 1-to-1 without unexpected shuffling or offsets.
+
+Let's pick up right here. Provide your latest tusb_gamepad library files defining the outbound report layouts, or let me know what behaviors you observed during hardware testing so we can dial in the bitfields and scaling factors.

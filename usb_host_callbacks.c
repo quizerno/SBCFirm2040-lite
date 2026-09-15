@@ -19,8 +19,8 @@ volatile ActiveHidDevice_t device_activation_queue[3] = {0};
 // Triggered automatically when the controller completes its internal "Magic Knock" setup sequence
 void tuh_sbc_mount_cb(uint8_t dev_addr, uint8_t instance, const sbch_interface_t *sbc_itf) {
     // Device is fully mounted! Turn NeoPixel to Green or Cyan here to verify.
-    neopixel_set_color(0, 255, 0); 
-    
+    //neopixel_set_color(0, 255, 0); 
+    neopixel_set_color(255, 69, 0); //ORANGE
     // Request the first input data block immediately
     tuh_sbc_receive_report(dev_addr, instance);
 }
@@ -30,7 +30,7 @@ void tuh_sbc_umount_cb(uint8_t dev_addr, uint8_t instance) {
     neopixel_set_color(255, 0, 0); // Turn Red when removed
 }
 
-// Triggered automatically when raw report data arrives over the USB pipe
+/* // Triggered automatically when raw report data arrives over the USB pipe
 void tuh_sbc_report_received_cb(uint8_t dev_addr, uint8_t instance, const uint8_t *report, uint16_t len) {
     // Cast the raw input report safely using the library's pre-defined layout struct
     sbch_interface_t *xid_itf = (sbch_interface_t *)report;
@@ -43,7 +43,31 @@ void tuh_sbc_report_received_cb(uint8_t dev_addr, uint8_t instance, const uint8_
 
     // Keep the polling loop active by preparing the endpoint for the next packet
     tuh_sbc_receive_report(dev_addr, instance);
+} */
+
+
+
+// Triggered automatically when raw report data arrives over the USB pipe
+void tuh_sbc_report_received_cb(uint8_t dev_addr, uint8_t instance, const uint8_t *report, uint16_t len) {
+    // Cast the raw input report safely using the library's pre-defined layout struct
+    sbch_interface_t *xid_itf = (sbch_interface_t *)report;
+
+    if (xid_itf->connected && xid_itf->new_pad_data) {
+        // Construct a tracking packet to push across to Core 0
+        usb_packet_t sbc_pkt;
+        sbc_pkt.len = (len > 64) ? 64 : len;
+        sbc_pkt.usage_id = 0x80; // Special tag identifying physical SBC hardware
+        sbc_pkt.dev_addr = dev_addr;
+        memcpy(sbc_pkt.report, report, sbc_pkt.len);
+
+        // Safely push the frame over to Core 0's processing queue
+        queue_try_add(&gamepad_packet_queue, &sbc_pkt);
+    }
+
+    // Keep the polling loop active by preparing the endpoint for the next packet
+    tuh_sbc_receive_report(dev_addr, instance);
 }
+
 
 
 // =========================================================================
@@ -78,12 +102,21 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_re
     }
 
     if (usage_id == 0) return;
-
-    if (usage_id == HID_ITF_PROTOCOL_KEYBOARD)      neopixel_set_color(255, 0, 0);     // Red
-    else if (usage_id == HID_ITF_PROTOCOL_MOUSE)    neopixel_set_color(0, 0, 255);    // Blue
-    else if (usage_id == 0x99)                      neopixel_set_color(0, 255, 0);    // Green
-    else if (usage_id == 0x05)                      neopixel_set_color(255, 200, 0);  // Yellow
+																						//Orange if Steel Battalion
+/*     if (usage_id == HID_ITF_PROTOCOL_KEYBOARD)      neopixel_set_color(255, 0, 0);     // Red if Keyboard
+    else if (usage_id == HID_ITF_PROTOCOL_MOUSE)    neopixel_set_color(0, 0, 255);    // Blue if Mouse
+    else if (usage_id == 0x99)                      neopixel_set_color(0, 255, 0);    // Green if Gamepad
+    else if (usage_id == 0x05)                      neopixel_set_color(255, 200, 0);  // Yellow 
+    else                                            neopixel_set_color(255, 255, 255); // White */
+    if (usage_id == HID_ITF_PROTOCOL_KEYBOARD)      neopixel_set_color(255, 0, 0);     // Red if Keyboard
+    else if (usage_id == HID_ITF_PROTOCOL_MOUSE)    neopixel_set_color(0, 0, 255);    // Blue if Mouse
+    else if (usage_id == 0x99)                      neopixel_set_color(0, 255, 0);    // Green if Gamepad (PS4)
+    else if (usage_id == 0x05 || usage_id == 0x04)  neopixel_set_color(128, 0, 128);  // Purple if Generic Joystick/Gamepad
+    else if (usage_id == 0x01)                      neopixel_set_color(255, 200, 0);  // Yellow 
     else                                            neopixel_set_color(255, 255, 255); // White
+
+
+
 
     for (int i = 0; i < 3; i++) {
         if (device_activation_queue[i].dev_addr == 0) {
@@ -115,8 +148,25 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
         }
     }
 
-    if (usage == HID_ITF_PROTOCOL_KEYBOARD) process_hid_keyboard(report, len);
-    else if (usage == HID_ITF_PROTOCOL_MOUSE) process_hid_mouse(report, len);
+    if (usage == HID_ITF_PROTOCOL_KEYBOARD) {
+        process_hid_keyboard(report, len);
+    } 
+    else if (usage == HID_ITF_PROTOCOL_MOUSE) {
+        process_hid_mouse(report, len);
+    }
+    // --- ADD THIS BLOCK TO PROCESS GENERIC JOYSTICKS/GAMEPADS ---
+    else if (usage == 0x04 || usage == 0x05 || usage == 0x99) {
+        // Construct the tracking packet matching your main.c structural layout
+        usb_packet_t joystick_pkt;
+        joystick_pkt.len = (len > 64) ? 64 : len;
+        joystick_pkt.usage_id = usage;
+        joystick_pkt.dev_addr = dev_addr;
+        memcpy(joystick_pkt.report, report, joystick_pkt.len);
+
+        // Safely push the frame over to Core 0's processing queue
+        queue_try_add(&gamepad_packet_queue, &joystick_pkt);
+    }
+
     tuh_hid_receive_report(dev_addr, instance);
 }
 

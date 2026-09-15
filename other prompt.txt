@@ -1,0 +1,115 @@
+Let's resume the RP2040 Steel Battalion passthrough project. 
+
+CURRENT STATE:
+- The custom CMakeLists.txt and pure 1:1 passthrough main.c are successfully compiling.
+- The Pico survives past its 1.5-second boot pulse without crashing.
+- Core 1 successfully runs its host stack: when the emulated device is plugged into GPIO 0/1, the onboard Pico LED successfully DOUBLE-BLINKS. 
+- However, after mounting, pressing buttons/inputs does not light up the LED (tuh_hid_report_received_cb is not firing).
+
+NEXT STEP: 
+We need to configure the host stack to explicitly listen for the emulated controller's specific raw endpoints or Vendor-Defined HID report structure so that data packets actually start streaming across the queue to the Xbox. Let's look at modifying tuh_hid_mount_cb or handling the host endpoint open descriptors.
+
+
+
+
+
+
+For an adapted controller set-up there is one path:
+-One or more USB-Devices connected to Host Cable of the adapter (HUB needed for 2+ devices)
+--The adapter is programmed to parse each of the devices to corresponding Steel Battalion inputs
+--The inputs are then sent to the Xbox
+
+
+
+For a custom controller set-up there are three paths: 
+1.
+-Using the GPIO pins on the adapter itself to have the adapter itself act at the controller.
+--An advantage of this is that you have far more direct control and no parsing is necessary
+--A disadvantage of this is that you are limited to the GPIO pins
+
+2.
+-One or more Custom HID Joysticks connected to Host Cable of the adapter (HUB needed for 2+ devices)
+--An advantage of this is that since you are responsible for the HID Protocol, it is far easier to parse it on the adapter side
+
+3.
+-Two or more Emulated Steel Battalion Devices connected to HUB connected to the Host Cable of the adapter
+--You may think this seems redundant, and you are partially right.
+--The advantage here is that we are using the adapter purely as a HUB for Steel Battalion inputs, so we do not need to do parsing, we are merely translating inputs.
+
+
+Custom Controller Options
+--Planning
+--Controller Adapters
+--Adapted Set-Up
+--DIY Set-Up
+[]Controller Adapters
+-Adapted Controllers
+-DIY Controllers
+-Adapted or DIY Pedals
+
+
+
+
+
+Custom Controller Options
+
+This is the bulk of the guide because it is extremely in-depth.
+If you are interested in playing on Emulator proceed to the section on Configuring Controls on Emulator
+
+
+If you are interested in playing on Xbox and like tinkering, read on.
+
+--Planning
+
+Two factors
+
+First, to interact with the Xbox USB protocol, we need a controller adapters.
+Second, you will need to decide on the control set-up you want. 
+Specifically:
+If you want to use existing hardware, creating a "Adapted Set-Up"
+If you want to create your own hardware, creating a "DIY Set-Up"
+Combining these set-ups is also an option but it will be heavily dependant on the adapter you choose. 
+
+
+--Adapted Set-Up
+--- How this works
+For an adapted controller set-up there is one path:
+-One or more USB-Devices connected to Host Cable of the adapter (HUB needed for 2+ devices)
+--The adapter is programmed to parse each of the devices to corresponding Steel Battalion inputs
+--The inputs are then sent to the Xbox
+
+
+
+
+
+--DIY Set-Up
+--- How this works
+
+You have three paths.
+
+1. We will call this the GPIO Path
+-Using the GPIO pins on the adapter itself to have the adapter itself act at the controller.
+--An advantage of this is that you have far more direct control and no parsing is necessary
+--A disadvantage of this is that you are limited to the GPIO pins unless you buy extenders
+
+2. We will call this the Adapted-HID Path
+-This is essentially the same as an adapted controller but with your own 
+-One or more Custom HID Joysticks connected to Host Cable of the adapter (HUB needed for 2+ devices)
+--An advantage of this is that since you are responsible for the HID Protocol, it is far easier to parse it on the adapter side
+--A disadvantage of this is that you need to buy more microcontroller boards
+
+3. We will call this the SBC HUB Path
+-Two or more Emulated Steel Battalion Devices connected to HUB connected to the Host Cable of the adapter
+--You may think this seems redundant, and you are partially right.
+--The advantage here is that we are using the adapter purely as a HUB for Steel Battalion inputs, so we do not need to do parsing, we are merely transferring inputs.
+--Another advantage is that you have MANY more options for inputs
+--The disadvantage is that you basically can only use this for Steel Battalion unless you reprogram the boards
+
+
+
+
+
+
+
+
+

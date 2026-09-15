@@ -177,13 +177,20 @@ uint16_t sbch_open(uint8_t rhport, uint8_t dev_addr, tusb_desc_interface_t const
     uint16_t PID, VID;
     tuh_vid_pid_get(dev_addr, &VID, &PID);
 
-    if (VID != 0x0A7B && PID != 0xD000 &&
-        itf_desc->bInterfaceClass != 0x58 &&  //XboxOG bInterfaceClass
-        itf_desc->bInterfaceSubClass != 0x42) //XboxOG bInterfaceSubClass
-    {
-        TU_LOG2("SBC: not a known device\n");
-        return false;
-    }
+// Strictly check if this interface matches the custom Xbox XID protocol signatures
+bool is_sbc = (itf_desc->bInterfaceClass == 0x58 && itf_desc->bInterfaceSubClass == 0x42);
+bool is_vid_pid = (VID == 0x0A7B && PID == 0xD000);
+
+if (!is_sbc && !is_vid_pid)
+{
+    // Crucial change: Explicitly tell TinyUSB this driver completely rejects this interface,
+    // freeing it up to be evaluated by standard HID / Gamepad companion loops!
+    return 0; 
+}
+
+// Right after verification, make sure we aren't overflowing our maximum allocations:
+TU_VERIFY(dev_addr <= CFG_TUH_DEVICE_MAX);
+
 
     TU_LOG2("SBC opening Interface %u (addr = %u)\r\n", itf_desc->bInterfaceNumber, dev_addr);
 

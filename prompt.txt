@@ -1,0 +1,7 @@
+I am working on building a custom USB joystick using a Teensy++ 2.0 (at90usb1286). 
+
+To ensure my custom HID parsing software can read the device without issue, I need it to enumerate as a pure, single-endpoint game controller with no secondary keyboard or mouse interfaces attached. 
+
+Please help me pick up where I left off:
+1. Review the steps for manually editing 'usb_desc.h' inside the Teensyduino core files to strip out the extra keyboard/mouse descriptors.
+2. Help me configure the direct digital buttons and analog pins (on Port F) for testing.

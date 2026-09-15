@@ -1,0 +1,12 @@
+We are resuming work on the Raspberry Pi Pico (RP2040) original Xbox Steel Battalion Controller (SBC) dual-core firmware project using the Pico SDK and TinyUSB Host stack. Core 1 drives the pio_usb host task, and Core 0 handles the input state machine.
+
+Here is the context of our active state and architecture:
+1. Compilation, alignment blocks, and generic HID/Joystick descriptor falling-through configurations are fully resolved and functional.
+2. Physical SBC input telemetry is successfully packed on Core 1 into a `usb_packet_t` framing block using a specialized tag identifier (`pkt.usage_id = 0x80`) and delivered across cores to Core 0's primary queue buffer.
+3. We have introduced an explicit `current_input_source == 2` processing path in `main.c` inside `apply_inputs_to_steel_battalion` to cleanly branch away from keyboard/mouse translation maps and execute native 1-to-1 bitwise passthrough.
+
+Next Immediate Steps & Session Focus:
+- Critical Audit: We must inspect and verify structural layout boundaries, byte sizes, and alignment matching discrepancies between incoming report structures (`in_report`) captured by the `sbc_host.c` driver and outbound emulation states (`out_report` / `steel_battalion_in_report`) handled by the `tusb_gamepad` library core.
+- Input Pipeline Validation: We must track exactly how passthrough SBC telemetry values (such as the 64-bit bButtons mask, 8-bit discrete GearLever, and raw floor pedals) are packed, mapped, and parsed across the `generic_gamepad_data_t` staging array without data dropping or bit shifting.
+
+Provide your latest code snippets for `main.c`, `device_profiles.h`, or library header representations detailing your `steel_battalion_in_report` layout definitions, and let's begin verification.

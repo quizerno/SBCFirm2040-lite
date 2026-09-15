@@ -36,6 +36,44 @@ typedef struct {
 } generic_gamepad_data_t;
 
 
+/* //fix to match steel battalion
+typedef struct {
+    uint64_t buttons;
+    int16_t  lx;
+    int16_t  ly;
+    int16_t  rx;
+    int16_t  ry;
+    int16_t  z_trigger;
+    uint8_t  hat;
+    bool     finger_active; // Keep this for touch/trackpads if used elsewhere
+
+    // --- ADD THESE EXPLICIT NATIVE SBC FIELDS ---
+    uint8_t  sbc_gear_lever;   // 0 = R, 1 = N, 2 = Gear 1, etc.
+    uint8_t  sbc_left_pedal;
+    uint8_t  sbc_middle_pedal;
+    uint8_t  sbc_right_pedal;
+} sbc_data_t; */
+
+
+typedef struct {
+    uint64_t bButtons;
+    uint8_t  bRotationLever;
+    uint8_t  bSightChangeX;
+    uint8_t  bSightChangeY;
+    uint8_t  bAimingX;
+    uint8_t  bAimingY;
+    uint8_t  bLeftPedal;
+    uint8_t  bMiddlePedal;
+    uint8_t  bRightPedal;
+    uint8_t  bTunerDial;
+    uint8_t  bGearLever;
+} local_sbc_data_t;
+
+
+
+
+
+
 bool parse_ps4_controller(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data);
 bool parse_generic_hid_gamepad(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data);
 bool parse_logitech_dual_action(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data);

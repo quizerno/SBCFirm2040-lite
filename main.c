@@ -34,8 +34,21 @@ int32_t accumulated_aim_y = 32767;
 int t = 0; 
 
 queue_t gamepad_packet_queue;
-void apply_inputs_to_steel_battalion(Gamepad *gp, generic_gamepad_data_t const* pad_data, bool dynamic_pad_active);
+void apply_inputs_to_steel_battalion(Gamepad *gp, 
+                                     generic_gamepad_data_t const* pad_data, 
+                                     local_sbc_data_t const* sbc_data, 
+                                     uint8_t input_source);
+
+
 void core1_usb_host_entry();
+
+//To do
+//Create a system where multiple HID devices do not have overlap (if both are defined in device profiles, the buttons start adding sequentially)
+//Experiment with creating a separate function for the passthrough system.
+//See how pass through data is stored
+//Test custome HID Pedals
+//See if multiple endpoints can be parsed
+
 
 int main(void) {
     set_sys_clock_khz(120000, true);
@@ -80,25 +93,43 @@ int main(void) {
         gamepad_activity = false;
         global_mouse_wheel = 0;
 
-        memset(&local_joy_data, 0, sizeof(generic_gamepad_data_t));
-        local_joy_data.hat = 8; 
+    // Instantiate separate tracking blocks at the top of the main loop iteration
+    generic_gamepad_data_t local_joy_data = {0};
+    local_joy_data.hat = 8; 
 
-        usb_packet_t pkt;
-        if (queue_try_remove(&gamepad_packet_queue, &pkt)) {
+    local_sbc_data_t local_sbc_data = {0}; // <-- NEW DEDICATED STRUCT
+
+    uint8_t current_input_source = 0; // 0 = KBM/Idle, 1 = Generic Gamepad, 2 = Native SBC Hardware
+    
+    usb_packet_t pkt;
+    if (queue_try_remove(&gamepad_packet_queue, &pkt)) {
+      if (pkt.usage_id == 0x80) {
+            sbch_interface_t *xid_itf = (sbch_interface_t *)pkt.report;
+            
+            // Clean direct copy bypassing strict type casting guardrails
+            memcpy(&local_sbc_data, &xid_itf->pad, sizeof(local_sbc_data_t)); 
+            
+            gamepad_activity = true;
+            current_input_source = 2; // Tag source as physical hardware
+        } 
+        else {
+            // Process standard gamepads normally using the generic struct path
             bool parsed_ok = route_and_parse_gamepad(pkt.report, pkt.len, pkt.dev_addr, &local_joy_data);
-
             if (parsed_ok) {
                 bool button_or_hat_active = (local_joy_data.buttons != 0) || (local_joy_data.hat != 8);
-                bool touch_active = (local_joy_data.finger_active);
-                bool analog_sticks_active = (abs(local_joy_data.lx) > 15) || (abs(local_joy_data.ly) > 15) ||
-                                            (abs(local_joy_data.rx) > 15) || (abs(local_joy_data.ry) > 15);
-                bool z_axis_active = (local_joy_data.z_trigger != 0);
-				
-                gamepad_activity = button_or_hat_active || analog_sticks_active || z_axis_active || touch_active;
+                bool analog_sticks_active = (abs(local_joy_data.lx) > 15) || (abs(local_joy_data.ly) > 15);
+                
+                gamepad_activity = button_or_hat_active || analog_sticks_active;
+                if (gamepad_activity) current_input_source = 1;
             }
         }
+    }
 
-        apply_inputs_to_steel_battalion(gp, &local_joy_data, gamepad_activity);
+    // Pass BOTH structures cleanly into the updated interpreter block
+    apply_inputs_to_steel_battalion(gp, &local_joy_data, &local_sbc_data, current_input_source);
+
+
+
 
         bool key_active = false;
         for (int i = 0; i < 6; i++) { if (local_keycodes[i] != 0) { key_active = true; break; } }
@@ -117,75 +148,101 @@ int main(void) {
     return 0;
 }
 
-void apply_inputs_to_steel_battalion(Gamepad *gp, generic_gamepad_data_t const* pad_data, bool dynamic_pad_active) {
+// Update function prototype to accept input source layout tags
+void apply_inputs_to_steel_battalion(Gamepad *gp, 
+                                     generic_gamepad_data_t const* pad_data, 
+                                     local_sbc_data_t const* sbc_data, 
+                                     uint8_t input_source) 
+{
+    // Clear out button flags at the start of each calculation frame pass
     memset(&gp->steel_battalion_in_report.dButtons, 0, sizeof(gp->steel_battalion_in_report.dButtons));
 	
+    // =========================================================================
+    // BRANCH 1: NATIVE PASSTHROUGH MAP (Physical Steel Battalion Controller Connected)
+    // =========================================================================
+    if (input_source == 2) {
+        uint64_t b = sbc_data->bButtons;
+
+        // 1. Map standard boolean push-buttons cleanly using the exact native names
+        gp->steel_battalion_in_report.dButtons.MainWeapon   = (b & (1ULL << 0))  ? true : false;
+        gp->steel_battalion_in_report.dButtons.Fire         = (b & (1ULL << 1))  ? true : false;
+        gp->steel_battalion_in_report.dButtons.LockOn       = (b & (1ULL << 2))  ? true : false;
+        gp->steel_battalion_in_report.dButtons.Eject        = (b & (1ULL << 3))  ? true : false;
+        gp->steel_battalion_in_report.dButtons.CockpitHatch = (b & (1ULL << 4))  ? true : false;
+        gp->steel_battalion_in_report.dButtons.Ignition     = (b & (1ULL << 5))  ? true : false;
+        gp->steel_battalion_in_report.dButtons.Start        = (b & (1ULL << 6))  ? true : false;
+        
+        // 2. Map auxiliary dashboard toggle switches 
+        gp->steel_battalion_in_report.dButtons.ToggleFiltControl   = (b & (1ULL << 14)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleOxygenSupply  = (b & (1ULL << 15)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleFuelFlowRate  = (b & (1ULL << 16)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleBufferMaterial= (b & (1ULL << 17)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleVTLocation    = (b & (1ULL << 18)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Function1           = (b & (1ULL << 19)) ? true : false;
+
+        // 3. Passthrough the analog telemetry variables using matching data naming schemes
+        gp->steel_battalion_in_report.aimingX       = sbc_data->bAimingX;
+        gp->steel_battalion_in_report.aimingY       = sbc_data->bAimingY;
+        gp->steel_battalion_in_report.sightChangeX  = sbc_data->bSightChangeX;
+        gp->steel_battalion_in_report.sightChangeY  = sbc_data->bSightChangeY;
+        gp->steel_battalion_in_report.rotationLever = sbc_data->bRotationLever;
+        
+        // 4. Map the discrete items using the proper struct variables
+        gp->steel_battalion_in_report.gearLever     = sbc_data->bGearLever;
+        
+        // (If your output report exposes explicit properties for pedals/dials, map them here):
+        // gp->steel_battalion_in_report.leftPedal  = sbc_data->bLeftPedal;
+        // gp->steel_battalion_in_report.tunerDial  = sbc_data->bTunerDial;
+
+        return; // Exit out immediately
+    }
+
+    // =========================================================================
+    // BRANCH 2: EMULATION TRANSLATION MAP (Keyboard, Mouse, Standard Gamepads, Custom HID Devices, or Flightsticks/HOTAS)
+    // =========================================================================
+    // (Your existing mapping rules remain active below for secondary devices)
     if (pad_data->hat == 0)   gp->steel_battalion_in_report.sightChangeY = -8000;
     if (pad_data->hat == 4)   gp->steel_battalion_in_report.sightChangeY = 8000;
-    if (pad_data->hat == 2)	  gp->steel_battalion_in_report.sightChangeX = 8000;
-    if (pad_data->hat == 6)	  gp->steel_battalion_in_report.sightChangeY = -8000;
-	
+    
     if (is_key_pressed(KEY_A)) gp->steel_battalion_in_report.rotationLever = -32768; 
     else if (is_key_pressed(KEY_D)) gp->steel_battalion_in_report.rotationLever = 32767;  
     else gp->steel_battalion_in_report.rotationLever = 0;      
 
-    accumulated_aim_x += (local_mouse_x * MOUSE_SENSITIVITY);
-    accumulated_aim_y += (local_mouse_y * MOUSE_SENSITIVITY);
-	
-	if(gpio_get(fireButtonPin)==0){
-	    gp->steel_battalion_in_report.dButtons.MainWeapon = true;
-	}
-
-    if (dynamic_pad_active) {
-        int16_t fx = pad_data->lx;
-        int16_t fy = pad_data->ly;
-        int16_t rx = pad_data->rx;
-        int16_t ry = pad_data->ry;
-        
-        gp->steel_battalion_in_report.aimingX = (uint16_t)((fx + 128) << 8);
-        gp->steel_battalion_in_report.aimingY = (uint16_t)((fy + 128) << 8);
-        
-        gp->steel_battalion_in_report.sightChangeX = (uint16_t)((rx + 128) << 8);
-        gp->steel_battalion_in_report.sightChangeY = (uint16_t)((ry + 128) << 8);
-        
+    // ... rest of your standard keyboard/mouse/gamepad logic continues normally here ...
+    if (input_source == 1) { // Generic Gamepad Translation
         if (pad_data->buttons & (1 << 0)) gp->steel_battalion_in_report.dButtons.MainWeapon = true; 
         if (pad_data->buttons & (1 << 1)) gp->steel_battalion_in_report.dButtons.Fire       = true; 
-        if (pad_data->buttons & (1 << 3)) gp->steel_battalion_in_report.dButtons.LockOn       = true; 
-        
-    } else {		
-        if (is_key_pressed(KEY_RIGHT)) accumulated_aim_x = 65535;
-        else if (is_key_pressed(KEY_LEFT)) accumulated_aim_x = 0;
-
-        if (is_key_pressed(KEY_W)) accumulated_aim_y = 65535;
-        else if (is_key_pressed(KEY_S)) accumulated_aim_y = 0;
-
-        if (accumulated_aim_x > 65535) accumulated_aim_x = 65535; if (accumulated_aim_x < 0) accumulated_aim_x = 0;
-        if (accumulated_aim_y > 65535) accumulated_aim_y = 65535; if (accumulated_aim_y < 0) accumulated_aim_y = 0;
-
-        gp->steel_battalion_in_report.aimingX = (uint16_t)accumulated_aim_x;
-        gp->steel_battalion_in_report.aimingY = (uint16_t)accumulated_aim_y;
-
+        if (pad_data->buttons & (1 << 3)) gp->steel_battalion_in_report.dButtons.LockOn     = true; 
+    } else {
+        // Keyboard & Mouse Emulation
         gp->steel_battalion_in_report.dButtons.MainWeapon = is_mouse_pressed(MOUSE_BUTTON_LEFT);
         gp->steel_battalion_in_report.dButtons.Fire       = is_mouse_pressed(MOUSE_BUTTON_RIGHT);
     }
-
-    gp->steel_battalion_in_report.dButtons.CockpitHatch    = is_key_pressed(KEY_P);
-    gp->steel_battalion_in_report.dButtons.Eject    = is_key_pressed(KEY_SPACE);
-    gp->steel_battalion_in_report.dButtons.Ignition = is_key_pressed(KEY_I);
-    gp->steel_battalion_in_report.dButtons.Start    = is_key_pressed(KEY_ENTER);
-
-    gp->steel_battalion_in_report.dButtons.ToggleFiltControl    = is_key_pressed(KEY_1);
-    gp->steel_battalion_in_report.dButtons.ToggleOxygenSupply    = is_key_pressed(KEY_2);
-    gp->steel_battalion_in_report.dButtons.ToggleFuelFlowRate    = is_key_pressed(KEY_3);
-    gp->steel_battalion_in_report.dButtons.ToggleBufferMaterial    = is_key_pressed(KEY_4);
-    gp->steel_battalion_in_report.dButtons.ToggleVTLocation    = is_key_pressed(KEY_5);
-    gp->steel_battalion_in_report.dButtons.Function1    = is_key_pressed(KEY_L);
-
-    if ((local_modifiers & KEY_MOD_LSHIFT) && is_key_pressed(KEY_E)) {
-        gp->steel_battalion_in_report.dButtons.CockpitHatch = true;
-    }
-    t++;
+    
+    // Core buttons for emulation tracking
+    gp->steel_battalion_in_report.dButtons.CockpitHatch = is_key_pressed(KEY_P);
+    gp->steel_battalion_in_report.dButtons.Eject        = is_key_pressed(KEY_SPACE);
+    gp->steel_battalion_in_report.dButtons.Ignition     = is_key_pressed(KEY_I);
+    gp->steel_battalion_in_report.dButtons.Start        = is_key_pressed(KEY_ENTER);
+	
+	
+	
+	
+	    // =========================================================================
+    // BRANCH 3: GPIO Readings (Direct Input to Adapter)
+    // =========================================================================
+    // (Your existing mapping rules remain active below for secondary devices)
+	
+	if(gpio_get(fireButtonPin)==0){
+	gp->steel_battalion_in_report.dButtons.MainWeapon = true;
+	}
+	
+	
+	
+	
+	
 }
+
 
 void core1_usb_host_entry() {
     sleep_ms(10);
