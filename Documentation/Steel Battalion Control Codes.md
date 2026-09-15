@@ -5,7 +5,7 @@ Struct [here.](https://github.com/faha223/tusb_gamepad/blob/2fd4b6da389a8b1c3da5
 **Buttons and Toggles**<br/>
 Values are TRUE or FALSE, 1 or 0.
 See binding notes for information on timing
-Referenced via: ```steel_battalion_out_report.dButtons.B```
+Referenced via: ```steel_battalion_in_report.dButtons.B```
 ```
 	//Buttons
 	uint16_t MainWeapon : 1;
@@ -52,8 +52,8 @@ Referenced via: ```steel_battalion_out_report.dButtons.B```
 	uint16_t notUsed : 9;
 
 //Example Usage
-steel_battalion_out_report.dButtons.MainWeapon = 1 //pressed
-steel_battalion_out_report.dButtons.MainWeapon = 0 //not pressed
+steel_battalion_in_report.dButtons.MainWeapon = 1 //pressed
+steel_battalion_in_reportt.dButtons.MainWeapon = 0 //not pressed
 ```
 
 **Gear Lever**<br/>
