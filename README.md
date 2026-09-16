@@ -4,7 +4,7 @@ Seel Battalion Controller Firmware for the RP2040 with Input Options. This enabl
 The options it includes are:
   * Using up to 4 HID devices to play Steel Battalion
   * Using direct GPIO inputs to play Steel Battalion
-  * Connecting an existing (or emulated) Steel Battalion Controller and altering the settings
+  * Connecting an existing (or emulated) Steel Battalion Controller
   * Any of the above together
 
 
@@ -90,6 +90,8 @@ device_add usb-host,vendorid=0x0a7b,productid=0xd000,port=1.3
   -  Gamepad Support ([Playstation 4 Controller Support added in branch](https://github.com/quizerno/SBCFirm2040-lite/tree/ps4-controller))
   -  Flightstick Support
   -  Control Configurator
+  -  Usage Codes clarification
+  -  PID/VID inputting for device sequencing
 
 
 
