@@ -2,10 +2,10 @@ To be implemented
 
 Specifying the VID and PID for specific control blocks, this will allow you to use multiple HID devices without worring about overlap
 
-Boolean KeyboardEnable
-Boolean MouseEnable
-Boolean GPIOEnable
-Boolean DeviceDecider
+* Boolean KeyboardEnable
+* Boolean MouseEnable
+* Boolean GPIOEnable
+* Boolean DeviceDecider
 
 
 |Block|VID|PID|Usage Identifier||
