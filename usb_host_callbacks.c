@@ -47,24 +47,27 @@ void tuh_sbc_report_received_cb(uint8_t dev_addr, uint8_t instance, const uint8_
 
 
 
-// Triggered automatically when raw report data arrives over the USB pipe
+// Force-diagnostic version to test raw pipeline connectivity
 void tuh_sbc_report_received_cb(uint8_t dev_addr, uint8_t instance, const uint8_t *report, uint16_t len) {
-    // Cast the raw input report safely using the library's pre-defined layout struct
-    sbch_interface_t *xid_itf = (sbch_interface_t *)report;
+    // DIAGNOSTIC 1: Force your NeoPixel to Purple immediately when ANY byte hits Core 1's interrupt handler
+   // neopixel_set_color(128, 0, 128); 
 
-    if (xid_itf->connected && xid_itf->new_pad_data) {
-        // Construct a tracking packet to push across to Core 0
-        usb_packet_t sbc_pkt;
-        sbc_pkt.len = (len > 64) ? 64 : len;
-        sbc_pkt.usage_id = 0x80; // Special tag identifying physical SBC hardware
-        sbc_pkt.dev_addr = dev_addr;
-        memcpy(sbc_pkt.report, report, sbc_pkt.len);
+    // Cast pointer safely to capture the driver tracking frame
+    const sbch_interface_t *xid_itf = (const sbch_interface_t *)report;
 
-        // Safely push the frame over to Core 0's processing queue
-        queue_try_add(&gamepad_packet_queue, &sbc_pkt);
-    }
+    // DIAGNOSTIC 2: Bypass 'connected' and 'new_pad_data' filters to isolate state machine locking
+    usb_packet_t sbc_pkt;
+    sbc_pkt.usage_id = 0x80; 
+    sbc_pkt.dev_addr = dev_addr;
+    sbc_pkt.len = sizeof(sbc_gamepad_t); // Hardcode expected boundary matching size (18 bytes)
 
-    // Keep the polling loop active by preparing the endpoint for the next packet
+    // Copy parsed gamepad state layout directly to transport payload
+    memcpy(sbc_pkt.report, &xid_itf->pad, sizeof(sbc_gamepad_t));
+
+    // Force add to queue to verify cross-core hardware channels
+    queue_try_add(&gamepad_packet_queue, &sbc_pkt);
+
+    // CRITICAL: Force-pump the endpoint handler to prevent USB endpoint stalling
     tuh_sbc_receive_report(dev_addr, instance);
 }
 

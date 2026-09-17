@@ -55,7 +55,7 @@ typedef struct {
 } sbc_data_t; */
 
 
-typedef struct {
+typedef struct __attribute__((packed)) {
     uint64_t bButtons;
     uint8_t  bRotationLever;
     uint8_t  bSightChangeX;
@@ -68,6 +68,7 @@ typedef struct {
     uint8_t  bTunerDial;
     uint8_t  bGearLever;
 } local_sbc_data_t;
+
 
 
 

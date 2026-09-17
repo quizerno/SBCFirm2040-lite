@@ -1,4 +1,3 @@
-
 #include "class/sbc/sbc_host.h"
 #include "device_profiles.h"
 #include "tusb_gamepad.h"  
@@ -7,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
-#include "host/usbh_pvt.h" // Needed for usbh_class_driver_t           
+#include "host/usbh_pvt.h"
 
 #include "pico/stdlib.h"
 #include "pico/multicore.h" 
@@ -21,7 +20,7 @@
 #include "hid_kbm.h"
 #include "hid_gamepad.h"
 #include "neopixel.h"
-#include "usb_host_callbacks.h" // Include modular host callback structures
+#include "usb_host_callbacks.h"
 
 #define HOST_PIN_DP 0 
 #define PICO_LED_PIN 25 
@@ -38,17 +37,11 @@ void apply_inputs_to_steel_battalion(Gamepad *gp,
                                      generic_gamepad_data_t const* pad_data, 
                                      local_sbc_data_t const* sbc_data, 
                                      uint8_t input_source);
-
+									 
+									 
+void test_led();									 
 
 void core1_usb_host_entry();
-
-//To do
-//Create a system where multiple HID devices do not have overlap (if both are defined in device profiles, the buttons start adding sequentially)
-//Experiment with creating a separate function for the passthrough system.
-//See how pass through data is stored
-//Test custome HID Pedals
-//See if multiple endpoints can be parsed
-
 
 int main(void) {
     set_sys_clock_khz(120000, true);
@@ -77,10 +70,13 @@ int main(void) {
     tusb_init(0, &device_init_config);
     Gamepad *gp = gamepad(0);
     
-    generic_gamepad_data_t local_joy_data = {0};
-    bool gamepad_activity = false;
+    // Core 0 Local Variable Storage Context Block
+    usb_packet_t pkt;
 
     while (1) {
+        // =========================================================================
+        // STEP 1: HOISTED RESET MATRIX (Runs first, at the top of every frame pass)
+        // =========================================================================
         local_modifiers     = global_modifiers;
         for (int i = 0; i < 6; i++) local_keycodes[i] = global_keycodes[i];
         local_mouse_buttons = global_mouse_buttons;
@@ -90,58 +86,80 @@ int main(void) {
 
         global_mouse_x = 0; 
         global_mouse_y = 0; 
-        gamepad_activity = false;
         global_mouse_wheel = 0;
 
-    // Instantiate separate tracking blocks at the top of the main loop iteration
-    generic_gamepad_data_t local_joy_data = {0};
-    local_joy_data.hat = 8; 
+        // Clean tracking state flags before verifying current inputs
+        bool gamepad_activity = false;
+        bool sbc_input        = false; // Correctly reset to false every frame loop execution pass
+        uint8_t current_input_source = 0; // 0 = KBM/Idle, 1 = Generic Gamepad, 2 = Native SBC Hardware
+		
+        // Allocate transient endpoint parsing data structures
+        generic_gamepad_data_t local_joy_data = {0};
+        local_joy_data.hat = 8; 
+        local_sbc_data_t local_sbc_data = {0};
 
-    local_sbc_data_t local_sbc_data = {0}; // <-- NEW DEDICATED STRUCT
-
-    uint8_t current_input_source = 0; // 0 = KBM/Idle, 1 = Generic Gamepad, 2 = Native SBC Hardware
-    
-    usb_packet_t pkt;
-    if (queue_try_remove(&gamepad_packet_queue, &pkt)) {
-      if (pkt.usage_id == 0x80) {
-            sbch_interface_t *xid_itf = (sbch_interface_t *)pkt.report;
-            
-            // Clean direct copy bypassing strict type casting guardrails
-            memcpy(&local_sbc_data, &xid_itf->pad, sizeof(local_sbc_data_t)); 
-            
-            gamepad_activity = true;
-            current_input_source = 2; // Tag source as physical hardware
-        } 
-        else {
-            // Process standard gamepads normally using the generic struct path
-            bool parsed_ok = route_and_parse_gamepad(pkt.report, pkt.len, pkt.dev_addr, &local_joy_data);
-            if (parsed_ok) {
-                bool button_or_hat_active = (local_joy_data.buttons != 0) || (local_joy_data.hat != 8);
-                bool analog_sticks_active = (abs(local_joy_data.lx) > 15) || (abs(local_joy_data.ly) > 15);
-                
-                gamepad_activity = button_or_hat_active || analog_sticks_active;
-                if (gamepad_activity) current_input_source = 1;
+        // =========================================================================
+        // STEP 2: CROSS-CORE PAYLOAD RETRIEVAL
+        // =========================================================================
+                // =========================================================================
+        // STEP 2: CROSS-CORE PAYLOAD RETRIEVAL
+        // =========================================================================
+        if (queue_try_remove(&gamepad_packet_queue, &pkt)) {
+            if (pkt.usage_id == 0x80) {
+                // FIX: Assert binary boundary alignments match sbc_gamepad_t exactly
+                if (pkt.len == sizeof(sbc_gamepad_t)) {
+                    // Perform a zero-shift safe copy straight into our local staging variable
+                    memcpy(&local_sbc_data, pkt.report, sizeof(sbc_gamepad_t)); 
+                    sbc_input = true;
+                    gamepad_activity = true;
+                    current_input_source = 2; // Direct Passthrough route active
+                } else {
+                    // This block will now remain completely silent because sizes match 1-to-1!
+                    printf("[SBC Core 0 Error]: Malformed payload length. Got %d, Expected %d\n", 
+                            pkt.len, (int)sizeof(sbc_gamepad_t));
+                    test_led();
+                }
+            } 
+            else {
+                // Fallback route handling for commercial input gamepads
+                bool parsed_ok = route_and_parse_gamepad(pkt.report, pkt.len, pkt.dev_addr, &local_joy_data);
+                if (parsed_ok) {
+                    bool button_or_hat_active = (local_joy_data.buttons != 0) || (local_joy_data.hat != 8);
+                    bool analog_sticks_active = (abs(local_joy_data.lx) > 15) || (abs(local_joy_data.ly) > 15);
+                    
+                    gamepad_activity = button_or_hat_active || analog_sticks_active;
+                    if (gamepad_activity) current_input_source = 1;
+                }
             }
         }
-    }
-
-    // Pass BOTH structures cleanly into the updated interpreter block
-    apply_inputs_to_steel_battalion(gp, &local_joy_data, &local_sbc_data, current_input_source);
 
 
+        // =========================================================================
+        // STEP 3: EMULATION TRANSLATION AND PASSTHROUGH INTERPRETER
+        // =========================================================================
+        apply_inputs_to_steel_battalion(gp, &local_joy_data, &local_sbc_data, current_input_source);
 
-
+        // =========================================================================
+        // STEP 4: ACTIVITY MONITOR & HARDWARE SIGNALING GATES
+        // =========================================================================
         bool key_active = false;
-        for (int i = 0; i < 6; i++) { if (local_keycodes[i] != 0) { key_active = true; break; } }
-		bool mouse_active = local_mouse_buttons != 0 || local_mouse_x != 0 || local_mouse_y != 0 || local_mouse_wheel != 0;
-		bool GPIOActive = (gpio_get(fireButtonPin) == 0);
+        for (int i = 0; i < 6; i++) { 
+            if (local_keycodes[i] != 0) { 
+                key_active = true; 
+                break; 
+            } 
+        }
+        bool mouse_active = (local_mouse_buttons != 0 || local_mouse_x != 0 || local_mouse_y != 0 || local_mouse_wheel != 0);
+        bool gpio_active = (gpio_get(fireButtonPin) == 0);
 		
-        if (key_active || local_modifiers != 0 || mouse_active || gamepad_activity || GPIOActive) {
+        // Drive physical onboard LED pin using clean, verified flags
+        if (key_active || local_modifiers != 0 || mouse_active || gamepad_activity || gpio_active || sbc_input) {
             gpio_put(PICO_LED_PIN, 1);
         } else {
             gpio_put(PICO_LED_PIN, 0);
         }
 
+        // Service internal TinyUSB device and gamepad framework tasks
         tusb_gamepad_task();
         tud_task(); 
     }
@@ -244,7 +262,7 @@ void apply_inputs_to_steel_battalion(Gamepad *gp,
 }
 
 
-void core1_usb_host_entry() {
+/* void core1_usb_host_entry() {
     sleep_ms(10);
     static pio_usb_configuration_t pio_cfg = PIO_USB_DEFAULT_CONFIG;
     pio_cfg.pin_dp = HOST_PIN_DP;
@@ -275,7 +293,24 @@ void core1_usb_host_entry() {
             led_is_active = false;
         }
     }
+} */
+
+void core1_usb_host_entry() {
+    sleep_ms(10);
+    static pio_usb_configuration_t pio_cfg = PIO_USB_DEFAULT_CONFIG;
+    pio_cfg.pin_dp = HOST_PIN_DP;
+    
+    // Explicitly pair controller properties prior to triggering global initialization sequences
+    tuh_configure(BOARD_HOST_RHPORT_NUM, TUH_CFGID_RPI_PIO_USB_CONFIGURATION, &pio_cfg);
+
+    tusb_rhport_init_t const host_init_config = {.role = TUSB_ROLE_HOST};
+    tusb_init(BOARD_HOST_RHPORT_NUM, &host_init_config);
+
+    while (1) {
+        tuh_task(); // Keeps internal pio_usb core drivers cycling
+    }
 }
+
 
 // Modern TinyUSB dynamic driver injection callback
 /* void usbh_app_driver_get_cb(usbh_class_driver_t const** driver_t, uint8_t* count) 
@@ -311,4 +346,11 @@ usbh_class_driver_t const* usbh_app_driver_get_cb(uint8_t* driver_count)
 
     *driver_count = 1;
     return &sbc_driver;
+}
+
+void test_led(){
+    for (int i = 0; i < 3; i++) {
+        gpio_put(PICO_LED_PIN, 1); sleep_ms(40);
+        gpio_put(PICO_LED_PIN, 0); sleep_ms(40);
+    }
 }

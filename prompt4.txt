@@ -1,0 +1,83 @@
+We are resuming the Raspberry Pi Pico (RP2040) Original Xbox Steel Battalion Controller dual-core firmware project using the Pico SDK and TinyUSB Host stack. Core 1 handles pio_usb host tasks, and Core 0 handles the input state machine.
+
+Current Architecture Context & Completed Steps:
+1. Inter-core IPC network queue layers have been optimized to pass only the clean 18-byte packed 'sbc_gamepad_t' structure payload inside 'usb_packet_t' frames from Core 1 to Core 0.
+2. Structure layouts ('sbc_gamepad_t' and 'local_sbc_data_t') have been cross-verified as matching bit-for-bit with strict packed bounds.
+3. The underlying TinyUSB callback 'tuh_sbc_report_received_cb' was updated to treat the incoming 'report' argument as an interface driver tracking pointer rather than a raw buffer context.
+
+Active Issue & Session Focus:
+- Input data dropping is occurring right at the end of the Core 0 main processing loop iteration. The 'gamepad_activity' state flag is being unconditionally overwritten to 'false' by a misplaced variable reset configuration block after data is removed from 'gamepad_packet_queue'.
+- We need to clean up the structural variable initialization order at the top of the main.c while(1) loop, confirm the green indicator LED lighting logic paths, and verify the physical button bitmasks map perfectly into the 'gp->steel_battalion_in_report' outbound registers.
+
+
+
+
+OLD
+
+
+if (queue_try_remove(&gamepad_packet_queue, &pkt)) {
+			//test_led();
+            if (pkt.usage_id == 0x80) {
+                // Assert binary boundary alignments match 1-to-1 tracking sizes
+                if (pkt.len == sizeof(local_sbc_data_t)) {
+                    memcpy(&local_sbc_data, pkt.report, sizeof(local_sbc_data_t)); 
+                    sbc_input = true;
+                    gamepad_activity = true;
+                    current_input_source = 2; // Direct Passthrough route active
+					//test_led();
+                } else {
+                    printf("[SBC Core 0 Error]: Malformed payload length. Got %d, Expected %d\n", 
+                            pkt.len, sizeof(local_sbc_data_t));
+							test_led();
+                }
+            } 
+            else {
+                // Fallback route handling for commercial input gamepads
+                bool parsed_ok = route_and_parse_gamepad(pkt.report, pkt.len, pkt.dev_addr, &local_joy_data);
+                if (parsed_ok) {
+                    bool button_or_hat_active = (local_joy_data.buttons != 0) || (local_joy_data.hat != 8);
+                    bool analog_sticks_active = (abs(local_joy_data.lx) > 15) || (abs(local_joy_data.ly) > 15);
+                    
+                    gamepad_activity = button_or_hat_active || analog_sticks_active;
+                    if (gamepad_activity) current_input_source = 1;
+                }
+            }
+        }
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		We are resuming the dual-core Raspberry Pi Pico (RP2040) Original Xbox Steel Battalion Controller (SBC) adapter project using the Pico SDK and TinyUSB. 
+
+Current Architecture Status:
+1. Core 1 dynamically parses the native Xbox XID class (0x58) streams from the physical controller.
+2. An 18-byte packed structure payload (`sbc_gamepad_t`) is successfully transferred via cross-core IPC queues to Core 0 without dropping frames or running into size-alignment discrepancies.
+3. Core 0 correctly intercepts these frames (`pkt.usage_id == 0x80`), bypassing translation profiles to achieve a zero-shift, native 1-to-1 bitwise execution pass. The Pico's green indicator LED actively responds to physical SBC inputs.
+
+Next Immediate Objectives & Focus:
+1. Outbound Validation: Verify if the original Xbox console (or target emulation layer) is cleanly receiving these translated packets via the outbound `tusb_gamepad` stack device profiles.
+2. Concurrent Hub Topologies: Test downstream operations utilizing an external USB Hub to guarantee simultaneous execution of standard HID devices (Keyboard/Mouse maps) alongside the native SBC passthrough connection.
+3. Input Matrix Refining: Complete a precision mapping of the 64-bit tactile switch mask, define all auxiliary usage codes, and verify analog stick center-lines to prevent axis drift on the console.
