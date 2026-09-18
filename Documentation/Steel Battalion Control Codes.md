@@ -70,7 +70,7 @@ steel_battalion_in_report.gearLever = (int) 10; //setting the Gear to 2
 **Tuner Dial**<br/>
 Values are 0 to 15.
 
-Referenced via ```steel_battalion_out_report.tunerDial = integer```
+Referenced via ```steel_battalion_in_report.tunerDial = integer```
 ```
 int8_t tunerDial;        //0-15 is from 9oclock, around clockwise
 //Example Usage
@@ -79,15 +79,15 @@ steel_battalion_in_report.tunerDial = (int) 9; //setting the dial to 9th positio
 ```
 
 **Weapon Aim (Right Joystick)**	<br/>
-Referenced via ```steel_battalion_out_report.aimingX =``` and ```steel_battalion_out_report.aimingX =```
+Referenced via ```steel_battalion_in_report.aimingX =``` and ```steel_battalion_in_report.aimingX =```
 See binding notes for information on axis coordination.
 ```
 uint16_t aimingX;       //0 to 2^16 left to right, does not recenter
 uint16_t aimingY;       //0 to 2^16 top to bottom, does not recenter
 
 //Example Usage
-steel_battalion_out_report.aimingX = ; //X position
-steel_battalion_out_report.aimingY = ; //Y position
+steel_battalion_in_report.aimingX = ; //X position
+steel_battalion_in_report.aimingY = ; //Y position
 
 
 ```
