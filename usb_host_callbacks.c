@@ -49,6 +49,9 @@ void tuh_sbc_report_received_cb(uint8_t dev_addr, uint8_t instance, const uint8_
 
 // Force-diagnostic version to test raw pipeline connectivity
 void tuh_sbc_report_received_cb(uint8_t dev_addr, uint8_t instance, const uint8_t *report, uint16_t len) {
+	
+	
+	
     // DIAGNOSTIC 1: Force your NeoPixel to Purple immediately when ANY byte hits Core 1's interrupt handler
    // neopixel_set_color(128, 0, 128); 
 
@@ -70,6 +73,11 @@ void tuh_sbc_report_received_cb(uint8_t dev_addr, uint8_t instance, const uint8_
     // CRITICAL: Force-pump the endpoint handler to prevent USB endpoint stalling
     tuh_sbc_receive_report(dev_addr, instance);
 }
+
+
+
+
+
 
 
 

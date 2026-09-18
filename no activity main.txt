@@ -1,7 +1,3 @@
-#define CFG_TUH_ENABLED 1
-#include "tusb.h"
-#include "host/usbh_pvt.h" 
-
 #include "class/sbc/sbc_host.h"
 #include "device_profiles.h"
 #include "tusb_gamepad.h"  
@@ -10,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include "host/usbh_pvt.h"
 
 #include "pico/stdlib.h"
 #include "pico/multicore.h" 
@@ -18,6 +15,7 @@
 #include "pico/util/queue.h" 
 
 #include "pio_usb.h"        
+#include "tusb.h"
 
 #include "hid_kbm.h"
 #include "hid_gamepad.h"
@@ -40,7 +38,9 @@ void apply_inputs_to_steel_battalion(Gamepad *gp,
                                      local_sbc_data_t const* sbc_data, 
                                      uint8_t input_source);
 									 
+									 
 void test_led();									 
+
 void core1_usb_host_entry();
 
 int main(void) {
@@ -70,6 +70,7 @@ int main(void) {
     tusb_init(0, &device_init_config);
     Gamepad *gp = gamepad(0);
     
+    // Core 0 Local Variable Storage Context Block
     usb_packet_t pkt;
 
     while (1) {
@@ -87,30 +88,40 @@ int main(void) {
         global_mouse_y = 0; 
         global_mouse_wheel = 0;
 
+        // Clean tracking state flags before verifying current inputs
         bool gamepad_activity = false;
-        bool sbc_input        = false; 
+        bool sbc_input        = false; // Correctly reset to false every frame loop execution pass
         uint8_t current_input_source = 0; // 0 = KBM/Idle, 1 = Generic Gamepad, 2 = Native SBC Hardware
 		
+        // Allocate transient endpoint parsing data structures
         generic_gamepad_data_t local_joy_data = {0};
         local_joy_data.hat = 8; 
         local_sbc_data_t local_sbc_data = {0};
 
         // =========================================================================
-        // STEP 2: CROSS-CORE PAYLOAD RETRIEVAL & TARGET RECOGNITION (CORE 0 ROLE)
+        // STEP 2: CROSS-CORE PAYLOAD RETRIEVAL
+        // =========================================================================
+                // =========================================================================
+        // STEP 2: CROSS-CORE PAYLOAD RETRIEVAL
         // =========================================================================
         if (queue_try_remove(&gamepad_packet_queue, &pkt)) {
-            // Direct Native/Emulated Steel Battalion Packet Tracking
             if (pkt.usage_id == 0x80) {
-                // FIXED: Enforce a safe maximum buffer boundary cap to eliminate out-of-bounds compiler traps
-                uint32_t safe_copy_len = (pkt.len > sizeof(local_sbc_data_t)) ? sizeof(local_sbc_data_t) : pkt.len;
-                memcpy(&local_sbc_data, pkt.report, safe_copy_len); 
-                
-                sbc_input = true;
-                gamepad_activity = true;
-                current_input_source = 2; 
+                // FIX: Assert binary boundary alignments match sbc_gamepad_t exactly
+                if (pkt.len == sizeof(sbc_gamepad_t)) {
+                    // Perform a zero-shift safe copy straight into our local staging variable
+                    memcpy(&local_sbc_data, pkt.report, sizeof(sbc_gamepad_t)); 
+                    sbc_input = true;
+                    gamepad_activity = true;
+                    current_input_source = 2; // Direct Passthrough route active
+                } else {
+                    // This block will now remain completely silent because sizes match 1-to-1!
+                    printf("[SBC Core 0 Error]: Malformed payload length. Got %d, Expected %d\n", 
+                            pkt.len, (int)sizeof(sbc_gamepad_t));
+                    test_led();
+                }
             } 
-            // Fallback Generic Controllers (PS4, D-Input, Joysticks)
-            else if (pkt.usage_id == 0x04 || pkt.usage_id == 0x05 || pkt.usage_id == 0x99) {
+            else {
+                // Fallback route handling for commercial input gamepads
                 bool parsed_ok = route_and_parse_gamepad(pkt.report, pkt.len, pkt.dev_addr, &local_joy_data);
                 if (parsed_ok) {
                     bool button_or_hat_active = (local_joy_data.buttons != 0) || (local_joy_data.hat != 8);
@@ -121,6 +132,7 @@ int main(void) {
                 }
             }
         }
+
 
         // =========================================================================
         // STEP 3: EMULATION TRANSLATION AND PASSTHROUGH INTERPRETER
@@ -140,21 +152,36 @@ int main(void) {
         bool mouse_active = (local_mouse_buttons != 0 || local_mouse_x != 0 || local_mouse_y != 0 || local_mouse_wheel != 0);
         bool gpio_active = (gpio_get(fireButtonPin) == 0);
 		
+        // Drive physical onboard LED pin using clean, verified flags
         if (key_active || local_modifiers != 0 || mouse_active || gamepad_activity || gpio_active || sbc_input) {
             gpio_put(PICO_LED_PIN, 1);
         } else {
             gpio_put(PICO_LED_PIN, 0);
         }
 
+        // Service internal TinyUSB device and gamepad framework tasks
         tusb_gamepad_task();
         tud_task(); 
     }
     return 0;
 }
-void apply_inputs_to_steel_battalion(Gamepad *gp, generic_gamepad_data_t const* pad_data, local_sbc_data_t const* sbc_data, uint8_t input_source) {
+
+// Update function prototype to accept input source layout tags
+void apply_inputs_to_steel_battalion(Gamepad *gp, 
+                                     generic_gamepad_data_t const* pad_data, 
+                                     local_sbc_data_t const* sbc_data, 
+                                     uint8_t input_source) 
+{
+    // Clear out button flags at the start of each calculation frame pass
     memset(&gp->steel_battalion_in_report.dButtons, 0, sizeof(gp->steel_battalion_in_report.dButtons));
+	
+    // =========================================================================
+    // BRANCH 1: NATIVE PASSTHROUGH MAP (Physical Steel Battalion Controller Connected)
+    // =========================================================================
     if (input_source == 2) {
         uint64_t b = sbc_data->bButtons;
+
+        // 1. Map standard boolean push-buttons cleanly using the exact native names
         gp->steel_battalion_in_report.dButtons.MainWeapon   = (b & (1ULL << 0))  ? true : false;
         gp->steel_battalion_in_report.dButtons.Fire         = (b & (1ULL << 1))  ? true : false;
         gp->steel_battalion_in_report.dButtons.LockOn       = (b & (1ULL << 2))  ? true : false;
@@ -162,40 +189,80 @@ void apply_inputs_to_steel_battalion(Gamepad *gp, generic_gamepad_data_t const* 
         gp->steel_battalion_in_report.dButtons.CockpitHatch = (b & (1ULL << 4))  ? true : false;
         gp->steel_battalion_in_report.dButtons.Ignition     = (b & (1ULL << 5))  ? true : false;
         gp->steel_battalion_in_report.dButtons.Start        = (b & (1ULL << 6))  ? true : false;
+        
+        // 2. Map auxiliary dashboard toggle switches 
         gp->steel_battalion_in_report.dButtons.ToggleFiltControl   = (b & (1ULL << 14)) ? true : false;
         gp->steel_battalion_in_report.dButtons.ToggleOxygenSupply  = (b & (1ULL << 15)) ? true : false;
         gp->steel_battalion_in_report.dButtons.ToggleFuelFlowRate  = (b & (1ULL << 16)) ? true : false;
         gp->steel_battalion_in_report.dButtons.ToggleBufferMaterial= (b & (1ULL << 17)) ? true : false;
         gp->steel_battalion_in_report.dButtons.ToggleVTLocation    = (b & (1ULL << 18)) ? true : false;
         gp->steel_battalion_in_report.dButtons.Function1           = (b & (1ULL << 19)) ? true : false;
+
+        // 3. Passthrough the analog telemetry variables using matching data naming schemes
         gp->steel_battalion_in_report.aimingX       = sbc_data->bAimingX;
         gp->steel_battalion_in_report.aimingY       = sbc_data->bAimingY;
         gp->steel_battalion_in_report.sightChangeX  = sbc_data->bSightChangeX;
         gp->steel_battalion_in_report.sightChangeY  = sbc_data->bSightChangeY;
         gp->steel_battalion_in_report.rotationLever = sbc_data->bRotationLever;
+        
+        // 4. Map the discrete items using the proper struct variables
         gp->steel_battalion_in_report.gearLever     = sbc_data->bGearLever;
-        return;
+        
+        // (If your output report exposes explicit properties for pedals/dials, map them here):
+        // gp->steel_battalion_in_report.leftPedal  = sbc_data->bLeftPedal;
+        // gp->steel_battalion_in_report.tunerDial  = sbc_data->bTunerDial;
+
+        return; // Exit out immediately
     }
-    if (pad_data->hat == 0) gp->steel_battalion_in_report.sightChangeY = -8000;
-    if (pad_data->hat == 4) gp->steel_battalion_in_report.sightChangeY = 8000;
+
+    // =========================================================================
+    // BRANCH 2: EMULATION TRANSLATION MAP (Keyboard, Mouse, Standard Gamepads, Custom HID Devices, or Flightsticks/HOTAS)
+    // =========================================================================
+    // (Your existing mapping rules remain active below for secondary devices)
+    if (pad_data->hat == 0)   gp->steel_battalion_in_report.sightChangeY = -8000;
+    if (pad_data->hat == 4)   gp->steel_battalion_in_report.sightChangeY = 8000;
+    
     if (is_key_pressed(KEY_A)) gp->steel_battalion_in_report.rotationLever = -32768; 
     else if (is_key_pressed(KEY_D)) gp->steel_battalion_in_report.rotationLever = 32767;  
     else gp->steel_battalion_in_report.rotationLever = 0;      
-    if (input_source == 1) { 
+
+    // ... rest of your standard keyboard/mouse/gamepad logic continues normally here ...
+    if (input_source == 1) { // Generic Gamepad Translation
         if (pad_data->buttons & (1 << 0)) gp->steel_battalion_in_report.dButtons.MainWeapon = true; 
         if (pad_data->buttons & (1 << 1)) gp->steel_battalion_in_report.dButtons.Fire       = true; 
         if (pad_data->buttons & (1 << 3)) gp->steel_battalion_in_report.dButtons.LockOn     = true; 
     } else {
+        // Keyboard & Mouse Emulation
         gp->steel_battalion_in_report.dButtons.MainWeapon = is_mouse_pressed(MOUSE_BUTTON_LEFT);
         gp->steel_battalion_in_report.dButtons.Fire       = is_mouse_pressed(MOUSE_BUTTON_RIGHT);
     }
+    
+    // Core buttons for emulation tracking
     gp->steel_battalion_in_report.dButtons.CockpitHatch = is_key_pressed(KEY_P);
     gp->steel_battalion_in_report.dButtons.Eject        = is_key_pressed(KEY_SPACE);
     gp->steel_battalion_in_report.dButtons.Ignition     = is_key_pressed(KEY_I);
     gp->steel_battalion_in_report.dButtons.Start        = is_key_pressed(KEY_ENTER);
-	if (gpio_get(fireButtonPin) == 0) { gp->steel_battalion_in_report.dButtons.MainWeapon = true; }
+	
+	
+	
+	
+	    // =========================================================================
+    // BRANCH 3: GPIO Readings (Direct Input to Adapter)
+    // =========================================================================
+    // (Your existing mapping rules remain active below for secondary devices)
+	
+	if(gpio_get(fireButtonPin)==0){
+	gp->steel_battalion_in_report.dButtons.MainWeapon = true;
+	}
+	
+	
+	
+	
+	
 }
-void core1_usb_host_entry() {
+
+
+/* void core1_usb_host_entry() {
     sleep_ms(10);
     static pio_usb_configuration_t pio_cfg = PIO_USB_DEFAULT_CONFIG;
     pio_cfg.pin_dp = HOST_PIN_DP;
@@ -204,20 +271,49 @@ void core1_usb_host_entry() {
     tusb_rhport_init_t const host_init_config = {.role = TUSB_ROLE_HOST};
     tusb_init(BOARD_HOST_RHPORT_NUM, &host_init_config);
 
+    uint32_t led_timer = 0;
+    bool led_is_active = false;
+
     while (1) {
         tuh_task(); 
-        
-        // Polling scheduler loop to ensure standard gamepads/peripherals wake up safely
+        uint32_t now = to_ms_since_boot(get_absolute_time());
+
         for (int i = 0; i < 3; i++) {
             if (device_activation_queue[i].needs_activation) {
                 tuh_hid_receive_report(device_activation_queue[i].dev_addr, device_activation_queue[i].instance);
-                device_activation_queue[i].needs_activation = false; 
+                gpio_put(PICO_LED_PIN, 1);
+                led_timer = now;
+                led_is_active = true;
+                device_activation_queue[i].needs_activation = false;
             }
         }
+
+        if (led_is_active && (now - led_timer >= 1000)) {
+            gpio_put(PICO_LED_PIN, 0);
+            led_is_active = false;
+        }
+    }
+} */
+
+void core1_usb_host_entry() {
+    sleep_ms(10);
+    static pio_usb_configuration_t pio_cfg = PIO_USB_DEFAULT_CONFIG;
+    pio_cfg.pin_dp = HOST_PIN_DP;
+    
+    // Explicitly pair controller properties prior to triggering global initialization sequences
+    tuh_configure(BOARD_HOST_RHPORT_NUM, TUH_CFGID_RPI_PIO_USB_CONFIGURATION, &pio_cfg);
+
+    tusb_rhport_init_t const host_init_config = {.role = TUSB_ROLE_HOST};
+    tusb_init(BOARD_HOST_RHPORT_NUM, &host_init_config);
+
+    while (1) {
+        tuh_task(); // Keeps internal pio_usb core drivers cycling
     }
 }
-// Replace your old usbh_app_driver_get_cb block with this exact signature layout:
-usbh_class_driver_t const* usbh_app_driver_get_cb(uint8_t* driver_count)
+
+
+// Modern TinyUSB dynamic driver injection callback
+/* void usbh_app_driver_get_cb(usbh_class_driver_t const** driver_t, uint8_t* count) 
 {
     static usbh_class_driver_t const custom_driver = {
         #if CFG_TUSB_DEBUG >= 2
@@ -230,11 +326,27 @@ usbh_class_driver_t const* usbh_app_driver_get_cb(uint8_t* driver_count)
         .close      = sbch_close
     };
 
+    *driver_t = &custom_driver;
+    *count = 1;
+} */
+
+// CHANGE THIS:
+// void usbh_app_driver_get_cb(usbh_class_driver_t const** driver_t, uint8_t* count)
+
+// TO THIS:
+usbh_class_driver_t const* usbh_app_driver_get_cb(uint8_t* driver_count)
+{
+    static usbh_class_driver_t const sbc_driver = {
+        .init       = sbch_init,
+        .open       = sbch_open,
+        .set_config = sbch_set_config,
+        .xfer_cb    = sbch_xfer_cb,
+        .close      = sbch_close
+    };
+
     *driver_count = 1;
-    return &custom_driver;
+    return &sbc_driver;
 }
-
-
 
 void test_led(){
     for (int i = 0; i < 3; i++) {
