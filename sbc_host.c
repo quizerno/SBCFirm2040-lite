@@ -288,8 +288,9 @@ bool sbch_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, tusb_xfer_result_t result, 
         TU_LOG2_MEM(sbc_itf->epin_buf, xferred_bytes, 2);
 
 
-        if (xferred_bytes == 26 && (rdata[6] & 0x80) == 0x80 && rdata[7] == 0x00 && (rdata[24] & 0xF0) == 0x00)
-        {
+        //if (xferred_bytes == 26 && (rdata[6] & 0x80) == 0x80 && rdata[7] == 0x00 && (rdata[24] & 0xF0) == 0x00)
+        if (xferred_bytes == 26)
+		{
             tu_memclr(pad, sizeof(sbc_gamepad_t));
 
             pad->bButtons       = (uint64_t)(rdata[6] & 0x7F) << 32 | (uint64_t)rdata[5] << 24 | rdata[4] << 16 | rdata[3] << 8 | rdata[2];

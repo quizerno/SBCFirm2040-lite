@@ -153,7 +153,7 @@ int main(void) {
 		
 		
 		
-/* 		        if (tud_hid_ready()) 
+		        if (tud_hid_ready()) 
         {
             uint8_t downstream_tx_frame[26];
             
@@ -163,7 +163,7 @@ int main(void) {
             // Fire the completed payload package down endpoint 0/1 to the physical console line
             tud_hid_report(0, downstream_tx_frame, 26);
         }
- */
+
         // Keep internal TinyUSB processing cycles moving forward
         tusb_gamepad_task();
         tud_task(); 
@@ -186,76 +186,39 @@ void apply_inputs_to_steel_battalion(Gamepad *gp,
     // =========================================================================
     if (input_source == 2) {
         uint64_t b = sbc_data->bButtons;
-			bool passthrough_buttons = (b & 0xFF) > 0; 
+
         // 1. Map standard boolean push-buttons cleanly using the exact native names
+        gp->steel_battalion_in_report.dButtons.MainWeapon   = (b & (1ULL << 0))  ? true : false;
+        gp->steel_battalion_in_report.dButtons.Fire         = (b & (1ULL << 1))  ? true : false;
+        gp->steel_battalion_in_report.dButtons.LockOn       = (b & (1ULL << 2))  ? true : false;
+        gp->steel_battalion_in_report.dButtons.Eject        = (b & (1ULL << 3))  ? true : false;
+        gp->steel_battalion_in_report.dButtons.CockpitHatch = (b & (1ULL << 4))  ? true : false;
+        gp->steel_battalion_in_report.dButtons.Ignition     = (b & (1ULL << 5))  ? true : false;
+        gp->steel_battalion_in_report.dButtons.Start        = (b & (1ULL << 6))  ? true : false;
+        
+        // 2. Map auxiliary dashboard toggle switches 
+        gp->steel_battalion_in_report.dButtons.ToggleFiltControl   = (b & (1ULL << 14)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleOxygenSupply  = (b & (1ULL << 15)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleFuelFlowRate  = (b & (1ULL << 16)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleBufferMaterial= (b & (1ULL << 17)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleVTLocation    = (b & (1ULL << 18)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Function1           = (b & (1ULL << 19)) ? true : false;
 
-
-        //Left Block
-        gp->steel_battalion_in_report.gearLever     = sbc_data->bGearLever;		
-		gp->steel_battalion_in_report.sightChangeX  = sbc_data->bSightChangeX;
+        // 3. Passthrough the analog telemetry variables using matching data naming schemes
+        gp->steel_battalion_in_report.aimingX       = sbc_data->bAimingX;
+        gp->steel_battalion_in_report.aimingY       = sbc_data->bAimingY;
+        gp->steel_battalion_in_report.sightChangeX  = sbc_data->bSightChangeX;
         gp->steel_battalion_in_report.sightChangeY  = sbc_data->bSightChangeY;
         gp->steel_battalion_in_report.rotationLever = sbc_data->bRotationLever;
         
-        gp->steel_battalion_in_report.dButtons.SightChange		   = (b & (1ULL << 0)) || passthrough_buttons;
-        gp->steel_battalion_in_report.dButtons.ToggleFiltControl   = (b & (1ULL << 1)) || passthrough_buttons;
-        gp->steel_battalion_in_report.dButtons.ToggleOxygenSupply  = (b & (1ULL << 2)) || passthrough_buttons;
-        gp->steel_battalion_in_report.dButtons.ToggleFuelFlowRate  = (b & (1ULL << 3)) || passthrough_buttons;
-        gp->steel_battalion_in_report.dButtons.ToggleBufferMaterial= (b & (1ULL << 4)) || passthrough_buttons;
-        gp->steel_battalion_in_report.dButtons.ToggleVTLocation    = (b & (1ULL << 5)) || passthrough_buttons;
-		
-		
-		//Middle Block
-        gp->steel_battalion_in_report.tunerDial     = sbc_data->bTunerDial;
-		
-		gp->steel_battalion_in_report.dButtons.Comm1 = (b & (1ULL << 6)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.Comm2 = (b & (1ULL << 7)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.Comm3 = (b & (1ULL << 8)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.Comm4 = (b & (1ULL << 9)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.Comm5 = (b & (1ULL << 10)) || passthrough_buttons;
-		
-		gp->steel_battalion_in_report.dButtons.Function1           		= (b & (1ULL << 11)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.Function2           		= (b & (1ULL << 12)) || passthrough_buttons;
-        gp->steel_battalion_in_report.dButtons.Function3           		= (b & (1ULL << 13)) || passthrough_buttons;	
-		gp->steel_battalion_in_report.dButtons.ForecastShootingSystem 	= (b & (1ULL << 14)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.Manipulator 				= (b & (1ULL << 15)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.LineColorChange 			= (b & (1ULL << 16)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.TankDetach 				= (b & (1ULL << 17)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.Override 				= (b & (1ULL << 18)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.NightScope 				= (b & (1ULL << 19)) || passthrough_buttons;
-		
-		gp->steel_battalion_in_report.dButtons.Washing 			 = (b & (1ULL << 20)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.Extinguisher 	 = (b & (1ULL << 21)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.Chaff 			 = (b & (1ULL << 22)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.WeaponConMain 	 = (b & (1ULL << 23)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.WeaponConSub 	 = (b & (1ULL << 24)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.WeaponConMagazine = (b & (1ULL << 25)) || passthrough_buttons;
-
-		
-		
-		//Right Block
-		gp->steel_battalion_in_report.aimingX       = sbc_data->bAimingX;
-        gp->steel_battalion_in_report.aimingY       = sbc_data->bAimingY;
-		gp->steel_battalion_in_report.dButtons.MainWeapon   = (b & (1ULL << 26)) || passthrough_buttons;
-        gp->steel_battalion_in_report.dButtons.Fire         = (b & (1ULL << 27)) || passthrough_buttons;
-        gp->steel_battalion_in_report.dButtons.LockOn       = (b & (1ULL << 28)) || passthrough_buttons;
-        gp->steel_battalion_in_report.dButtons.Eject        = (b & (1ULL << 29)) || passthrough_buttons;
-        gp->steel_battalion_in_report.dButtons.CockpitHatch = (b & (1ULL << 30)) || passthrough_buttons;
-        gp->steel_battalion_in_report.dButtons.Ignition     = (b & (1ULL << 31)) || passthrough_buttons;
-        gp->steel_battalion_in_report.dButtons.Start        = (b & (1ULL << 32)) || passthrough_buttons;
+        // 4. Map the discrete items using the proper struct variables
+        gp->steel_battalion_in_report.gearLever     = sbc_data->bGearLever;
         
-		gp->steel_battalion_in_report.dButtons.MultiMonitorOpenClose 	= (b & (1ULL << 33)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.MultiMonitorMapZoomInOut = (b & (1ULL << 34)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.MultiMonitorModeSelect 	= (b & (1ULL << 35)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.MultiMonitorSubMonitor 	= (b & (1ULL << 36)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.MainMonitorZoomIn 		= (b & (1ULL << 37)) || passthrough_buttons;
-		gp->steel_battalion_in_report.dButtons.MainMonitorZoomOut 		= (b & (1ULL << 38)) || passthrough_buttons;
-		
-		
-		
-        //Pedal Block
+        // 5. Map foot pedals directly into report slots
         gp->steel_battalion_in_report.leftPedal     = sbc_data->bLeftPedal;
         gp->steel_battalion_in_report.middlePedal   = sbc_data->bMiddlePedal;
         gp->steel_battalion_in_report.rightPedal    = sbc_data->bRightPedal;
+        gp->steel_battalion_in_report.tunerDial     = sbc_data->bTunerDial;
 
         return; // Exit out immediately as raw passthrough is fully populated
     }
