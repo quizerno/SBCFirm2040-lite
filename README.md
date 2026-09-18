@@ -101,9 +101,10 @@ device_add usb-host,vendorid=0x0a7b,productid=0xd000,port=1.3
 
 
 # Repositories Used
-* [PICO-PIO-USB Host example](https://github.com/raspberrypi/pico-examples/tree/master/usb/host/host_cdc_msc_hid).
-* [TinyUSB HID Controller](https://github.com/hathach/tinyusb/tree/2d56dc533e45e4e91b15e93fdab5e22e964f328d/examples/host/hid_controller)
-* [Pico Battalion](https://github.com/sonik-br/pico_battalion)
-* [ogx360_t4](https://github.com/Ryzee119/ogx360_t4)
-* [Neopixel](https://github.com/adafruit/adafruit_neopixel)
+* [PICO-PIO-USB Host example](https://github.com/raspberrypi/pico-examples/tree/master/usb/host/host_cdc_msc_hid). - Host Information
+* [TinyUSB HID Controller](https://github.com/hathach/tinyusb/tree/2d56dc533e45e4e91b15e93fdab5e22e964f328d/examples/host/hid_controller) - Other HID information
+* [Pico Battalion](https://github.com/sonik-br/pico_battalion) - Steel Battalion Controller Hosting
+* [ogx360_t4](https://github.com/Ryzee119/ogx360_t4) - Xinput Libraries
+* [BSBB](https://github.com/Quantx/bsbb-usb/tree/master) - Packet Reading
+* [Neopixel](https://github.com/adafruit/adafruit_neopixel) - For LED Color
   
