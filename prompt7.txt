@@ -1,0 +1,8 @@
+Let's pick up on compiling the Raspberry Pi Pico project (SBCFirm2040-lite) with the updated TinyUSB host stack driver. 
+
+Here is where we left off:
+1. File Alignment: We consolidated 'sbc_host.c' and 'sbc_host.h' down into the library submodule directory ('lib/tinyusb/src/class/sbc/') and updated 'CMakeLists.txt' to track it.
+2. Structure Constraint: The 'sbc_gamepad_t' struct must remain strictly in its accurate 16-bit word array layout (e.g., 'uint16_t wButtons[3]' and 16-bit analog channels like 'bLeftPedal', 'bAimingX').
+3. Current Block: We are debugging a structural alignment compilation error in '/lib/tinyusb/src/host/usbh.c' around line 325 where the custom '.init = sbch_init' driver registration hook is breaking. 
+
+Let's inspect 'usbh.c' around line 325 to fix the syntax error, and then check 'usb_host_callbacks.c' to cleanly map the new 16-bit button array and analog channels into 'main.c' or 'local_sbc_data'.

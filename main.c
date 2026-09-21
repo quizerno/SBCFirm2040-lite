@@ -135,8 +135,9 @@ int main(void) {
                 sbc_gamepad_t const* incoming_pad = (sbc_gamepad_t const*)pkt.report;
                 
                 // FIXED LAYOUT STRUCT PASS: Map fields cleanly to our tracking registers
-                local_sbc_data.bButtons       = incoming_pad->bButtons;
-
+				local_sbc_data.bButtons       = ((uint64_t)incoming_pad->wButtons[2] << 32) |
+												((uint64_t)incoming_pad->wButtons[1] << 16) |
+												(uint64_t)incoming_pad->wButtons[0];
                 // Downscale the 16-bit high-resolution inputs to 8-bit tracking spaces safely
                 local_sbc_data.bAimingX       = (uint8_t)(incoming_pad->bAimingX >> 8);
                 local_sbc_data.bAimingY       = (uint8_t)(incoming_pad->bAimingY >> 8);

@@ -49,7 +49,7 @@ set(SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/device_profiles.h
 	${CMAKE_CURRENT_SOURCE_DIR}/neopixel.c
 	${CMAKE_CURRENT_SOURCE_DIR}/usb_host_callbacks.c
-	${CMAKE_CURRENT_SOURCE_DIR}/sbc_host.c
+	${CMAKE_CURRENT_SOURCE_DIR}/lib/tinyusb/src/class/sbc/sbc_host.c
 	#${CMAKE_CURRENT_SOURCE_DIR}/tusb_xinput/xinput_host.c
 	#/lib/tinyusb/src/class/
 )

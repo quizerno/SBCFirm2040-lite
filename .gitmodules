@@ -1,6 +1,7 @@
 [submodule "lib/tinyusb"]
 	path = lib/tinyusb
-	url = https://github.com/hathach/tinyusb
+	url = https://github.com/quizerno/tinyusb.git
+	branch = sbc-driver-patch
 [submodule "lib/tusb_gamepad"]
 	path = lib/tusb_gamepad
 	url = https://github.com/faha223/tusb_gamepad
