@@ -1,0 +1,12 @@
+Resume the dual-core RP2040 Original Xbox Steel Battalion controller adapter project. We are fixing an analog axis and digital button cross-talk issue caused by structural misalignment with the raw 26-byte XID packet layout.
+
+### Current Project State:
+1. Core 1 Host Driver (`sbc_host.c`/`sbc_host.h`): We aligned the `sbc_gamepad_t` driver structure to match the official 16-bit packed little-endian specification layout (Word 0, 1, 2 buttons, followed by 16-bit analog fields for axes/pedals, and 8-bit fields for the dials). Inside `sbch_xfer_cb`, we swapped manual byte shifts for a clean, direct 26-byte `memcpy(pad, rdata, 26);`. 
+2. Inter-Core Payload Structure: `tuh_sbc_report_received_cb` copies the pre-parsed `pad` struct directly via `memcpy(sbc_pkt.report, &xid_itf->pad, sizeof(sbc_gamepad_t));` and queues it across to Core 0 with `usage_id = 0x80`. Hot-plugging is fully stable (Orange/Red NeoPixel indicators).
+3. Core 0 State (`main.c`): 250Hz emulated command-mirror transmission via `tud_hid_report` is operational. 
+
+### The Current Focus Area:
+We just updated **STEP 2** of `main.c` to parse the structure fields explicitly, packing the 16-bit button arrays (`wButtons[0]`, `wButtons[1]`, `wButtons[2]`) into a 64-bit local variable tracking mask (`local_sbc_data.bButtons`) and downscaling the 16-bit analog stick values to 8-bit (`>> 8`). The gear shifter and tuner dial are confirmed stable.
+
+### What We Need Next:
+We need to test the physical controller with this unified build pass. When I say go, we will evaluate if the analog joysticks and foot pedals sweep smoothly across their expected ranges, and verify if the digital buttons match their layout without cross-firing. 

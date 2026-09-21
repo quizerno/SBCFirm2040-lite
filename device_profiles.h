@@ -14,7 +14,8 @@ typedef enum {
     PROFILE_SONY_DS4,
     PROFILE_LOGITECH_DUAL_ACTION,
     PROFILE_STEEL_BATTALION,      // Native direct-pass profile for VT simulation setups
-    PROFILE_DEBUG_RAW_DUMP        // Fallback for simulation gear to capture data fields
+    PROFILE_DEBUG_RAW_DUMP,      // Fallback for simulation gear to capture data fields
+	PROFILE_HORI_FLIGHTSTICK 
 } gamepad_profile_id_t;
 
 // Structural registry entry
@@ -40,7 +41,8 @@ static const gamepad_device_id_t GAMEPAD_REGISTRY[] = {
     { 0x054C, 0x09CC, PROFILE_SONY_DS4,            "Gamepad",      "Sony DualShock 4 V2" },
     { 0x054C, 0x0CE6, PROFILE_DEBUG_RAW_DUMP,       "Gamepad",      "Sony DualSense PS5" },
     { 0x054C, 0x0268, PROFILE_DEBUG_RAW_DUMP,       "Gamepad",      "Sony DualShock 3 (Sixaxis)" },
-
+	
+    { 0x0F0D, 0x00A9, PROFILE_HORI_FLIGHTSTICK, "Flight Stick", "Hori Flightstick PS3/PS4" },
     // === MICROSOFT / XBOX CONSOLES ===
     { 0x045E, 0x028E, PROFILE_DEBUG_RAW_DUMP,       "Gamepad",      "Xbox 360 Wired Controller" },
     { 0x045E, 0x02D1, PROFILE_DEBUG_RAW_DUMP,       "Gamepad",      "Xbox One Controller (Early)" },
@@ -92,5 +94,6 @@ static const gamepad_device_id_t GAMEPAD_REGISTRY[] = {
 bool route_and_parse_gamepad(uint8_t const* report, uint16_t len, uint8_t dev_addr, generic_gamepad_data_t* out_data);
 bool parse_logitech_dual_action(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data);
 bool parse_steel_battalion_native(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data);
+bool parse_hori_flightstick(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data);
 
 #endif // DEVICE_PROFILES_H

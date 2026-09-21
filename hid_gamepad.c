@@ -178,6 +178,55 @@ static void debug_dump_raw_report(uint8_t const* report, uint16_t len, const cha
     return true; 
 }
 
+/**
+ * Unpacks raw data frames from the Hori Flightstick PS3/PS4 (VID 0x0F0D, PID 0x00A9).
+ * Normalizes large-throw analog pots into our generic internal signed envelopes.
+ */
+bool parse_hori_flightstick(uint8_t const* report, uint16_t len, generic_gamepad_data_t* out_data) {
+    // Basic verification: PlayStation data packets typically carry a Report ID of 0x01
+    // A standard Hori flight stick layout carries an explicit data envelope size
+    if (len < 10) return false;
+
+    // Accounts for physical Report ID padding shifts if present
+    uint8_t offset = (report[0] == 0x01) ? 1 : 0;
+
+    // Clear structure memory states safely
+    memset(out_data, 0, sizeof(generic_gamepad_data_t));
+
+    // 1. Map Main Stick Axes (Shift 0..255 unsigned inputs into standard signed center bounds)
+    out_data->lx = (int16_t)report[0 + offset] - 128; // Main Stick X (Roll)
+    out_data->ly = (int16_t)report[1 + offset] - 128; // Main Stick Y (Pitch)
+    
+    // 2. Map Auxiliary Analog Controls
+    out_data->rx = (int16_t)report[2 + offset] - 128; // Main Stick Twist (Rudder/Yaw)
+    out_data->ry = (int16_t)report[3 + offset] - 128; // Physical Throttle Lever Axis
+
+    // 3. Extract the POV Hat Switch (Typically lower 4 bits of byte index 4)
+    uint8_t hat_raw = report[4 + offset] & 0x0F;
+    out_data->hat = (hat_raw > 7) ? 8 : hat_raw; // Force clamp values outside 0-7 to default IDLE
+
+    // 4. Map the Digital Button Matrix (Unpacking face triggers and grip toggles)
+    out_data->buttons = 0;
+    
+    // Extract upper face buttons packed into the top half of byte index 4
+    uint8_t upper_nibble_buttons = (report[4 + offset] >> 4) & 0x0F;
+    out_data->buttons |= (upper_nibble_buttons & 0x01) << 0; // Trigger / Primary Fire
+    out_data->buttons |= (upper_nibble_buttons & 0x02) << 1; // Missile / Thumb Face 1
+    out_data->buttons |= (upper_nibble_buttons & 0x04) << 2; // Weapon Select Face 2
+    out_data->buttons |= (upper_nibble_buttons & 0x08) << 3; // Auxiliary Face 3
+
+    // Accumulate structural grip options natively spanning across byte indices 5 and 6
+    out_data->buttons |= ((uint32_t)report[5 + offset]) << 4;
+    if (len - offset >= 7) {
+        out_data->buttons |= ((uint32_t)report[6 + offset]) << 12;
+    }
+
+    // Combine specialized analog inputs into your cross-core triggers channel
+    // E.g., mapping left and right toe brakes or paddle steps if preferred
+    out_data->z_trigger = 0; 
+    
+    return true;
+}
 
 
 
@@ -431,6 +480,8 @@ bool route_and_parse_gamepad(uint8_t const* report, uint16_t len, uint8_t dev_ad
 
     // Replace the bottom section of route_and_parse_gamepad with this:
     switch (active_profile) {
+        case PROFILE_HORI_FLIGHTSTICK:
+            return parse_hori_flightstick(report, len, out_data);
         case PROFILE_SONY_DS4:
             return parse_ps4_controller(report, len, out_data);
             

@@ -13,14 +13,9 @@
 
 #ifndef _TUSB_SBC_HOST_H_
 #define _TUSB_SBC_HOST_H_
-#include "tusb.h"
+
 #include "tusb_option.h"
 #include "common/tusb_common.h"
-//#include "tusb_common.h"
-//#include "host/usbh.h"
-
-
-
 
 #ifdef __cplusplus
  extern "C" {
@@ -42,7 +37,7 @@
 
 // to do: add button mask
 
-/* typedef struct sbc_gamepad
+typedef struct sbc_gamepad
 {
     uint64_t bButtons;
     uint8_t bRotationLever;
@@ -56,23 +51,6 @@
     uint8_t bTunerDial;
     uint8_t bGearLever;
 } sbc_gamepad_t;
- */
-
-typedef struct sbc_gamepad
-{
-    uint16_t wButtons[3];     // 48 bits matching the exact Word 0, 1, 2 layout
-    uint16_t bAimingX;        // 16-bit analog stick
-    uint16_t bAimingY;        // 16-bit analog stick
-    int16_t  bRotationLever;  // 16-bit steering wheel
-    int16_t  bSightChangeX;   // 16-bit trackball X
-    int16_t  bSightChangeY;   // 16-bit trackball Y
-    uint16_t bLeftPedal;      // 16-bit clutch
-    uint16_t bMiddlePedal;    // 16-bit brake
-    uint16_t bRightPedal;     // 16-bit gas
-    int8_t   bTunerDial;      // 8-bit dial
-    int8_t   bGearLever;      // 8-bit shifter
-} sbc_gamepad_t;
-
 
 typedef struct sbc_leds
 {
@@ -156,17 +134,11 @@ bool tuh_sbc_set_leds(uint8_t dev_addr, uint8_t instance, const sbc_leds_t *valu
 //void sbch_init       (void);
 //bool sbch_open       (uint8_t rhport, uint8_t dev_addr, tusb_desc_interface_t const *desc_itf, uint16_t max_len);
 //bool sbch_open(uint8_t rhport, uint8_t dev_addr, tusb_desc_interface_t const *itf_desc, uint16_t max_len);
-/* uint16_t sbch_open(uint8_t rhport, uint8_t dev_addr, tusb_desc_interface_t const *itf_desc, uint16_t max_len);
+uint16_t sbch_open(uint8_t rhport, uint8_t dev_addr, tusb_desc_interface_t const *itf_desc, uint16_t max_len);
 bool sbch_init       (void);
 bool sbch_set_config (uint8_t dev_addr, uint8_t itf_num);
 bool sbch_xfer_cb    (uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, uint32_t xferred_bytes);
-void sbch_close      (uint8_t dev_addr); */
-
-bool sbch_init(void);
-uint16_t sbch_open(uint8_t rhport, uint8_t dev_addr, tusb_desc_interface_t const *itf_desc, uint16_t max_len);
-bool sbch_set_config(uint8_t dev_addr, uint8_t itf_num);
-bool sbch_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, tusb_xfer_result_t result, uint32_t xferred_bytes);
-void sbch_close(uint8_t dev_addr);
+void sbch_close      (uint8_t dev_addr);
 
 #ifdef __cplusplus
 }

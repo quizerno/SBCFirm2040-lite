@@ -1,0 +1,64 @@
+        // Left Block (Byte 2 / Bits 0-7)
+        gp->steel_battalion_in_report.gearLever     = sbc_data->bGearLever;		
+        gp->steel_battalion_in_report.sightChangeX  = sbc_data->bSightChangeX;
+        gp->steel_battalion_in_report.sightChangeY  = sbc_data->bSightChangeY;
+        gp->steel_battalion_in_report.rotationLever = sbc_data->bRotationLever;
+        
+        gp->steel_battalion_in_report.dButtons.SightChange          = (b & (1ULL << 0)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleFiltControl    = (b & (1ULL << 1)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleOxygenSupply   = (b & (1ULL << 2)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleFuelFlowRate   = (b & (1ULL << 3)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleBufferMaterial = (b & (1ULL << 4)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleVTLocation     = (b & (1ULL << 5)) ? true : false;
+		
+        // Middle Block (Byte 3 / Bits 8-15)
+        gp->steel_battalion_in_report.tunerDial     = sbc_data->bTunerDial;
+		
+        gp->steel_battalion_in_report.dButtons.Comm1 = (b & (1ULL << 6)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Comm2 = (b & (1ULL << 7)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Comm3 = (b & (1ULL << 8)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Comm4 = (b & (1ULL << 9)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Comm5 = (b & (1ULL << 10)) ? true : false;
+		
+        // Center-Right Panel (Byte 4 / Bits 16-23)
+        gp->steel_battalion_in_report.dButtons.Function1            = (b & (1ULL << 11)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Function2            = (b & (1ULL << 12)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Function3            = (b & (1ULL << 13)) ? true : false;	
+        gp->steel_battalion_in_report.dButtons.ForecastShootingSystem = (b & (1ULL << 14)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Manipulator          = (b & (1ULL << 15)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.LineColorChange      = (b & (1ULL << 16)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.TankDetach          = (b & (1ULL << 17)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Override             = (b & (1ULL << 18)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.NightScope           = (b & (1ULL << 19)) ? true : false;
+		
+        // Weapon Switches (Byte 5 / Bits 24-31)
+        gp->steel_battalion_in_report.dButtons.Washing              = (b & (1ULL << 20)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Extinguisher         = (b & (1ULL << 21)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Chaff                = (b & (1ULL << 22)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.WeaponConMain        = (b & (1ULL << 23)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.WeaponConSub         = (b & (1ULL << 24)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.WeaponConMagazine    = (b & (1ULL << 25)) ? true : false;
+
+        // Stick Grip Switches (Byte 6 / Bits 32-39)
+        gp->steel_battalion_in_report.aimingX       = sbc_data->bAimingX;
+        gp->steel_battalion_in_report.aimingY       = sbc_data->bAimingY;
+        
+        gp->steel_battalion_in_report.dButtons.MainWeapon   = (b & (1ULL << 26)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Fire         = (b & (1ULL << 27)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.LockOn       = (b & (1ULL << 28)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Eject        = (b & (1ULL << 29)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.CockpitHatch = (b & (1ULL << 30)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Ignition     = (b & (1ULL << 31)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Start        = (b & (1ULL << 32)) ? true : false;
+        
+        gp->steel_battalion_in_report.dButtons.MultiMonitorOpenClose   = (b & (1ULL << 33)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.MultiMonitorMapZoomInOut = (b & (1ULL << 34)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.MultiMonitorModeSelect  = (b & (1ULL << 35)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.MultiMonitorSubMonitor  = (b & (1ULL << 36)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.MainMonitorZoomIn       = (b & (1ULL << 37)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.MainMonitorZoomOut      = (b & (1ULL << 38)) ? true : false;
+		
+        // Pedal Block
+        gp->steel_battalion_in_report.leftPedal     = sbc_data->bLeftPedal;
+        gp->steel_battalion_in_report.middlePedal   = sbc_data->bMiddlePedal;
+        gp->steel_battalion_in_report.rightPedal    = sbc_data->bRightPedal;

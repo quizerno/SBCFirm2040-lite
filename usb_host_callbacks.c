@@ -11,6 +11,16 @@
 extern queue_t gamepad_packet_queue;
 volatile ActiveHidDevice_t device_activation_queue[3] = {0};
 
+
+
+//led tests
+
+// Global tracking handles for the physical controller connection
+volatile uint8_t physical_sbc_addr = 0;
+volatile uint8_t physical_sbc_instance = 0;
+volatile bool    physical_sbc_connected = false;
+
+
 // =========================================================================
 // SONIK-BR SPECIFIC NATIVE STEEL BATTALION DRIVER CALLBACKS
 // =========================================================================
@@ -18,6 +28,13 @@ volatile ActiveHidDevice_t device_activation_queue[3] = {0};
 
 // Triggered automatically when the controller completes its internal "Magic Knock" setup sequence
 void tuh_sbc_mount_cb(uint8_t dev_addr, uint8_t instance, const sbch_interface_t *sbc_itf) {
+	
+	//led tests
+	physical_sbc_addr = dev_addr;
+    physical_sbc_instance = instance;
+    physical_sbc_connected = true;
+	
+	
     // Device is fully mounted! Turn NeoPixel to Green or Cyan here to verify.
     //neopixel_set_color(0, 255, 0); 
     neopixel_set_color(255, 69, 0); //ORANGE
@@ -28,6 +45,15 @@ void tuh_sbc_mount_cb(uint8_t dev_addr, uint8_t instance, const sbch_interface_t
 // Triggered automatically when the controller disconnects
 void tuh_sbc_umount_cb(uint8_t dev_addr, uint8_t instance) {
     neopixel_set_color(255, 0, 0); // Turn Red when removed
+	
+		//led tests
+	    if (dev_addr == physical_sbc_addr && instance == physical_sbc_instance) {
+        physical_sbc_connected = false;
+        physical_sbc_addr = 0;
+        physical_sbc_instance = 0;
+    }
+	
+	
 }
 
 /* // Triggered automatically when raw report data arrives over the USB pipe
@@ -47,7 +73,7 @@ void tuh_sbc_report_received_cb(uint8_t dev_addr, uint8_t instance, const uint8_
 
 
 
-// Force-diagnostic version to test raw pipeline connectivity
+/* // Force-diagnostic version to test raw pipeline connectivity
 void tuh_sbc_report_received_cb(uint8_t dev_addr, uint8_t instance, const uint8_t *report, uint16_t len) {
 	
 	
@@ -62,10 +88,15 @@ void tuh_sbc_report_received_cb(uint8_t dev_addr, uint8_t instance, const uint8_
     usb_packet_t sbc_pkt;
     sbc_pkt.usage_id = 0x80; 
     sbc_pkt.dev_addr = dev_addr;
-    sbc_pkt.len = sizeof(sbc_gamepad_t); // Hardcode expected boundary matching size (18 bytes)
+    //sbc_pkt.len = sizeof(sbc_gamepad_t); // Hardcode expected boundary matching size (18 bytes)
 
     // Copy parsed gamepad state layout directly to transport payload
-    memcpy(sbc_pkt.report, &xid_itf->pad, sizeof(sbc_gamepad_t));
+    //memcpy(sbc_pkt.report, &xid_itf->pad, sizeof(sbc_gamepad_t));
+
+
+    sbc_pkt.len = (xid_itf->epin_size > 64) ? 64 : xid_itf->epin_size;
+    memcpy(sbc_pkt.report, xid_itf->epin_buf, sbc_pkt.len);
+
 
     // Force add to queue to verify cross-core hardware channels
     queue_try_add(&gamepad_packet_queue, &sbc_pkt);
@@ -73,10 +104,31 @@ void tuh_sbc_report_received_cb(uint8_t dev_addr, uint8_t instance, const uint8_
     // CRITICAL: Force-pump the endpoint handler to prevent USB endpoint stalling
     tuh_sbc_receive_report(dev_addr, instance);
 }
+ */
 
 
 
 
+void tuh_sbc_report_received_cb(uint8_t dev_addr, uint8_t instance, const uint8_t *report, uint16_t len) {
+    // 1. Cast pointer safely to capture the driver tracking frame wrapper
+    const sbch_interface_t *xid_itf = (const sbch_interface_t *)report;
+
+    // 2. Build our inter-core message payload
+    usb_packet_t sbc_pkt;
+    sbc_pkt.usage_id = 0x80; 
+    sbc_pkt.dev_addr = dev_addr;
+    
+    // 3. SUCCESS FIX: Copy the pre-aligned driver structure directly.
+    // This bypasses any raw array parsing issues entirely.
+    sbc_pkt.len = sizeof(sbc_gamepad_t);
+    memcpy(sbc_pkt.report, &xid_itf->pad, sizeof(sbc_gamepad_t));
+
+    // Secure transit to Core 0
+    queue_try_add(&gamepad_packet_queue, &sbc_pkt);
+
+    // Keep the polling pipeline active
+    tuh_sbc_receive_report(dev_addr, instance);
+}
 
 
 

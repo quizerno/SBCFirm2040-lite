@@ -15,6 +15,11 @@ typedef struct {
 
 extern volatile ActiveHidDevice_t device_activation_queue[3];
 
+extern volatile uint8_t physical_sbc_addr;
+extern volatile uint8_t physical_sbc_instance;
+extern volatile bool    physical_sbc_connected;
+
+
 // External queue reference for input packet transfers
 typedef struct {
     uint8_t report[64];

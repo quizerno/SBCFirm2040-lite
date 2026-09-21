@@ -1,0 +1,69 @@
+        // =========================================================================
+        // STEP 2: CROSS-CORE PAYLOAD RETRIEVAL & TARGET RECOGNITION (CORE 0 ROLE)
+        // =========================================================================
+        if (queue_try_remove(&gamepad_packet_queue, &pkt)) {
+            // Direct Native/Emulated Steel Battalion Packet Tracking
+            if (pkt.usage_id == 0x80) {
+                memset(&local_sbc_data, 0, sizeof(local_sbc_data_t));
+                
+                uint8_t const* rdata = pkt.report;
+                
+                // FIXED: Map array index bytes to their correct sequential bit-shift columns
+                local_sbc_data.bButtons       = ((uint64_t)(rdata[6] & 0x7F) << 32) | 
+                                                ((uint64_t)rdata[5] << 24) | 
+                                                ((uint64_t)rdata[4] << 16) | 
+                                                ((uint64_t)rdata[3] << 8)  | 
+                                                ((uint64_t)rdata[2]);
+                                                
+                // FIXED: Direct structural array offset corrections
+                local_sbc_data.bAimingX       = rdata[9];
+                local_sbc_data.bAimingY       = rdata[11];
+                local_sbc_data.bRotationLever = rdata[13];
+                local_sbc_data.bSightChangeX  = rdata[15];
+                local_sbc_data.bSightChangeY  = rdata[17];
+                local_sbc_data.bLeftPedal     = rdata[19];
+                local_sbc_data.bMiddlePedal   = rdata[21];
+                local_sbc_data.bRightPedal    = rdata[23];
+                local_sbc_data.bTunerDial     = rdata[24] & 0x0F;
+                local_sbc_data.bGearLever     = rdata[25];
+                
+                sbc_input = true;
+                gamepad_activity = true;
+                current_input_source = 2; 
+            } 
+            // Fallback Generic Controllers (PS4, D-Input, Joysticks)
+            else if (pkt.usage_id == 0x04 || pkt.usage_id == 0x05 || pkt.usage_id == 0x99) {
+                bool parsed_ok = route_and_parse_gamepad(pkt.report, pkt.len, pkt.dev_addr, &local_joy_data);
+                if (parsed_ok) {
+                    bool button_or_hat_active = (local_joy_data.buttons != 0) || (local_joy_data.hat != 8);
+                    bool analog_sticks_active = (abs(local_joy_data.lx) > 15) || (abs(local_joy_data.ly) > 15);
+                    
+                    gamepad_activity = button_or_hat_active || analog_sticks_active;
+                    if (gamepad_activity) current_input_source = 1;
+                }
+            }
+        }
+
+
+
+
+Resume the dual-core RP2040 Original Xbox Steel Battalion controller adapter project. 
+
+### Current Project State:
+1. Core 1 Host Driver: Custom XID `sbc_host` driver handles physical controller enumeration. When plugged in, the dashboard NeoPixel turns Orange; when unplugged, it switches to Red. Hot-plug re-mount looping is fully verified and stable via a targeted `tuh_sbc_receive_report` pump inside the Core 1 main task loop.
+2. Inter-Core Payload Structure: `tuh_sbc_report_received_cb` captures the 26-byte raw endpoint buffer (`xid_itf->epin_buf`) directly from the wire and queues it across to Core 0 with `usage_id = 0x80`. 
+3. Core 0 State: Emulated command-mirror transmission via `tud_hid_report` at 250Hz is verified stable. 
+
+### The Immediate Task: Fix Bitmask Shift Alignment
+We are currently troubleshooting button mapping alignment bugs inside `main.c`. The analog sticks are stable, but the 40-bit `local_sbc_data.bButtons` reconstruction mask in STEP 2 of `main.c` is experiencing offset shifts. 
+- Symptom: Pressing `SubWeaponControl` cross-triggers `MainWeaponFire`, and `SightChange` buttons are bleeding into other control states. 
+- Cause: The current bitwise shifts (`rdata[2]`, `rdata[3]`, `rdata[4]`, etc. cast to `uint64_t`) are slightly misaligned with the raw XID packet format structure, causing `apply_inputs_to_steel_battalion` to sample wrong bit coordinates.
+
+### What We Need Next:
+Provide the definitive, side-by-side corrected code blocks for:
+1. **STEP 2** of `main.c` (reconstructing `local_sbc_data.bButtons` from the raw `pkt.report` buffer with precise byte indexes and `uint64_t` shifts).
+2. **BRANCH 1** of `apply_inputs_to_steel_battalion` (the bitmask equations checking `1ULL << X` fields) to ensure they perfectly match the byte columns we are passing.
+
+Let's begin by reviewing the precise 5-byte button matrix map of a raw Steel Battalion XID report so we can finalize this bitmask once and for all.
+
+

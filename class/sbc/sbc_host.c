@@ -1,6 +1,5 @@
 #include <stdint.h>
 #include <stdbool.h>
-#include <string.h>
 #include "tusb_option.h"
 
 #if (TUSB_OPT_HOST_ENABLED && CFG_TUH_SBC)
@@ -53,36 +52,18 @@ static uint8_t get_instance_id_by_itfnum(uint8_t dev_addr, uint8_t itf)
     return 0xff;
 }
 
-/* bool tuh_sbc_receive_report(uint8_t dev_addr, uint8_t instance)
+bool tuh_sbc_receive_report(uint8_t dev_addr, uint8_t instance)
 {
     sbch_interface_t *sbc_itf = get_instance(dev_addr, instance);
     TU_VERIFY(usbh_edpt_claim(dev_addr, sbc_itf->ep_in));
 
-    if ( !_edpt_xfer(dev_addr, sbc_itf->ep_in, sbc_itf->epin_buf, sbc_itf->epin_size) )
+    if ( !usbh_edpt_xfer(dev_addr, sbc_itf->ep_in, sbc_itf->epin_buf, sbc_itf->epin_size) )
     {
         usbh_edpt_claim(dev_addr, sbc_itf->ep_in);
         return false;
     }
     return true;
-} */
-
-bool tuh_sbc_receive_report(uint8_t dev_addr, uint8_t instance)
-{
-    sbch_interface_t *sbc_itf = get_instance(dev_addr, instance);
-
-    // Initialize the modern transaction tracker struct
-    tuh_xfer_t xfer = {
-        .daddr       = dev_addr,
-        .ep_addr     = sbc_itf->ep_in,
-        .buflen      = sbc_itf->epin_size,
-        .buffer      = sbc_itf->epin_buf,
-        .complete_cb = NULL // Set to NULL for standard tracking mapping
-    };
-
-    // Execute the transfer transaction directly
-    return tuh_edpt_xfer(&xfer);
 }
-
 
 bool tuh_sbc_set_leds(uint8_t dev_addr, uint8_t instance, const sbc_leds_t *value)
 {
@@ -123,7 +104,7 @@ bool tuh_sbc_set_leds(uint8_t dev_addr, uint8_t instance, const sbc_leds_t *valu
     return tuh_sbc_send_report(dev_addr, instance, txbuf, len);
 }
 
-/* bool tuh_sbc_send_report(uint8_t dev_addr, uint8_t instance, const uint8_t *txbuf, uint16_t len)
+bool tuh_sbc_send_report(uint8_t dev_addr, uint8_t instance, const uint8_t *txbuf, uint16_t len)
 {
     sbch_interface_t *sbc_itf = get_instance(dev_addr, instance);
 
@@ -132,26 +113,6 @@ bool tuh_sbc_set_leds(uint8_t dev_addr, uint8_t instance, const sbc_leds_t *valu
 
     memcpy(sbc_itf->epout_buf, txbuf, len);
     return usbh_edpt_xfer(dev_addr, sbc_itf->ep_out, sbc_itf->epout_buf, len);
-} */
-
-bool tuh_sbc_send_report(uint8_t dev_addr, uint8_t instance, const uint8_t *txbuf, uint16_t len)
-{
-    sbch_interface_t *sbc_itf = get_instance(dev_addr, instance);
-    TU_ASSERT(len <= sbc_itf->epout_size);
-
-    // Copy your transmission content directly into the operational buffer segment
-    memcpy(sbc_itf->epout_buf, txbuf, len);
-
-    // Initialize the transaction tracker matching the OUT direction parameters
-    tuh_xfer_t xfer = {
-        .daddr       = dev_addr,
-        .ep_addr     = sbc_itf->ep_out,
-        .buflen      = len,
-        .buffer      = sbc_itf->epout_buf,
-        .complete_cb = NULL
-    };
-
-    return tuh_edpt_xfer(&xfer);
 }
 
 //--------------------------------------------------------------------+
@@ -171,40 +132,32 @@ bool sbch_init(void)
 //bool sbch_open(uint8_t rhport, uint8_t dev_addr, tusb_desc_interface_t const *desc_itf, uint16_t max_len)
 
 uint16_t sbch_open(uint8_t rhport, uint8_t dev_addr, tusb_desc_interface_t const *itf_desc, uint16_t max_len){
-    (void) rhport;
-	TU_VERIFY(dev_addr <= CFG_TUH_DEVICE_MAX);
+    TU_VERIFY(dev_addr <= CFG_TUH_DEVICE_MAX);
 
     uint16_t PID, VID;
     tuh_vid_pid_get(dev_addr, &VID, &PID);
 
-// Strictly check if this interface matches the custom Xbox XID protocol signatures
-bool is_sbc = (itf_desc->bInterfaceClass == 0x58 && itf_desc->bInterfaceSubClass == 0x42);
-bool is_vid_pid = (VID == 0x0A7B && PID == 0xD000);
+    if (VID != 0x0A7B && PID != 0xD000 &&
+        itf_desc->bInterfaceClass != 0x58 &&  //XboxOG bInterfaceClass
+        itf_desc->bInterfaceSubClass != 0x42) //XboxOG bInterfaceSubClass
+    {
+        TU_LOG2("SBC: not a known device\n");
+        return false;
+    }
 
-if (!is_sbc && !is_vid_pid)
-{
-    // Crucial change: Explicitly tell TinyUSB this driver completely rejects this interface,
-    // freeing it up to be evaluated by standard HID / Gamepad companion loops!
-    return 0; 
-}
-
-// Right after verification, make sure we aren't overflowing our maximum allocations:
-TU_VERIFY(dev_addr <= CFG_TUH_DEVICE_MAX);
-
-
-    TU_LOG2("SBC opening Interface %u (addr = %u)\r\n", itf_desc->bInterfaceNumber, dev_addr);
+    TU_LOG2("SBC opening Interface %u (addr = %u)\r\n", desc_itf->bInterfaceNumber, dev_addr);
 
     sbch_device_t *sbc_dev = get_dev(dev_addr);
     TU_ASSERT(sbc_dev->inst_count < CFG_TUH_SBC, 0);
 
     sbch_interface_t *sbc_itf = get_instance(dev_addr, sbc_dev->inst_count);
-    sbc_itf->itf_num = itf_desc->bInterfaceNumber;
+    sbc_itf->itf_num = desc_itf->bInterfaceNumber;
 
     //Parse descriptor for all endpoints and open them
-    uint8_t const *p_desc = (uint8_t const *)itf_desc;
+    uint8_t const *p_desc = (uint8_t const *)desc_itf;
     int endpoint = 0;
     int pos = 0;
-	while (endpoint < itf_desc->bNumEndpoints && pos < max_len)
+    while (endpoint < desc_itf->bNumEndpoints && pos < max_len)
     {
         if (tu_desc_type(p_desc) != TUSB_DESC_ENDPOINT)
         {
@@ -235,7 +188,7 @@ TU_VERIFY(dev_addr <= CFG_TUH_DEVICE_MAX);
 	//return true;
 }
 
-/* bool sbch_set_config(uint8_t dev_addr, uint8_t itf_num)
+bool sbch_set_config(uint8_t dev_addr, uint8_t itf_num)
 {
     uint8_t instance = get_instance_id_by_itfnum(dev_addr, itf_num);
     sbch_interface_t *sbc_itf = get_instance(dev_addr, instance);
@@ -248,22 +201,9 @@ TU_VERIFY(dev_addr <= CFG_TUH_DEVICE_MAX);
 
     usbh_driver_set_config_complete(dev_addr, sbc_itf->itf_num);
     return true;
-} */
-
-bool sbch_set_config(uint8_t dev_addr, uint8_t itf_num)
-{
-    uint8_t instance = get_instance_id_by_itfnum(dev_addr, itf_num);
-    sbch_interface_t *sbc_itf = get_instance(dev_addr, instance);
-    sbc_itf->connected = true;
-
-    // Call the mount notification directly to avoid compiler warning guards
-    tuh_sbc_mount_cb(dev_addr, instance, sbc_itf);
-
-    return true;
 }
 
-//bool sbch_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, uint32_t xferred_bytes)
-bool sbch_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, tusb_xfer_result_t result, uint32_t xferred_bytes)
+bool sbch_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, xfer_result_t result, uint32_t xferred_bytes)
 {
     if (result != XFER_RESULT_SUCCESS)
     {
@@ -282,56 +222,36 @@ bool sbch_xfer_cb(uint8_t dev_addr, uint8_t ep_addr, tusb_xfer_result_t result, 
         TU_LOG2("Get Report callback (%u, %u, %u bytes)\r\n", dev_addr, instance, xferred_bytes);
         TU_LOG2_MEM(sbc_itf->epin_buf, xferred_bytes, 2);
 
-if (xferred_bytes == 26)
-{
-    tu_memclr(pad, sizeof(sbc_gamepad_t));
-    
-    // Copy the raw 26-byte packet straight into our aligned structure
-    // This removes any manual bit shifting errors entirely
-    memcpy(pad, rdata, 26);
 
-    sbc_itf->new_pad_data = true;
-}
+        if (xferred_bytes == 26 && (rdata[6] & 0x80) == 0x80 && rdata[7] == 0x00 && (rdata[24] & 0xF0) == 0x00)
+        {
+            tu_memclr(pad, sizeof(sbc_gamepad_t));
 
+            pad->bButtons       = (uint64_t)(rdata[6] & 0x7F) << 32 | (uint64_t)rdata[5] << 24 | rdata[4] << 16 | rdata[3] << 8 | rdata[2];
+            pad->bAimingX       = rdata[9];
+            pad->bAimingY       = rdata[11];
+            pad->bRotationLever = rdata[13];
+            pad->bSightChangeX  = rdata[15];
+            pad->bSightChangeY  = rdata[17];
+            pad->bLeftPedal     = rdata[19];
+            pad->bMiddlePedal   = rdata[21];
+            pad->bRightPedal    = rdata[23];
+            pad->bTunerDial     = rdata[24] & 0x0F;
+            pad->bGearLever     = rdata[25];
 
-        //if (xferred_bytes == 26 && (rdata[6] & 0x80) == 0x80 && rdata[7] == 0x00 && (rdata[24] & 0xF0) == 0x00)
-if (xferred_bytes == 26)
-{
-    tu_memclr(pad, sizeof(sbc_gamepad_t));
-    
-    // Copy the raw 26-byte packet straight into our aligned structure
-    // This removes any manual bit shifting errors entirely
-    memcpy(pad, rdata, 26);
-
-    sbc_itf->new_pad_data = true;
-}
+            sbc_itf->new_pad_data = true;
+        }
 
         tuh_sbc_report_received_cb(dev_addr, instance, (const uint8_t *)sbc_itf, sizeof(sbch_interface_t));
         sbc_itf->new_pad_data = false;
     }
-/*     else
+    else
     {
         if (tuh_sbc_report_sent_cb)
         {
             tuh_sbc_report_sent_cb(dev_addr, instance, sbc_itf->epout_buf, xferred_bytes);
         }
-    } */
-	
-	else
-{
-    // Wrap the call safely so the linker doesn't throw a hard failure if it's missing
-    #ifdef tuh_sbc_report_sent_cb
-    if (tuh_sbc_report_sent_cb)
-    {
-        tuh_sbc_report_sent_cb(dev_addr, instance, sbc_itf->epout_buf, xferred_bytes);
     }
-    #else
-    // If not used, we can provide a weak fallback or a safe placeholder
-    (void)dev_addr;
-    (void)instance;
-    (void)xferred_bytes;
-    #endif
-}
 
     return true;
 }
@@ -343,7 +263,10 @@ void sbch_close(uint8_t dev_addr)
 
     for (uint8_t inst = 0; inst < sbc_dev->inst_count; inst++)
     {
-        tuh_sbc_umount_cb(dev_addr, inst);
+        if (tuh_sbc_umount_cb)
+        {
+            tuh_sbc_umount_cb(dev_addr, inst);
+        }
     }
     tu_memclr(sbc_dev, sizeof(sbch_device_t));
 }
