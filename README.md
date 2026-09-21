@@ -36,7 +36,7 @@ Follow either of the examples here
 * [OGX Mini example](https://github.com/MegaCadeDev/OGX-Mini-2026/tree/master/hardware)
 
 **Neopixel LED**<br/>
-The Pico runs on 3.3v so you will need to power the LED via the 3.3 out on the Pico.
+The Pico runs on 3.3v so you will need to power the LED via the 3.3 out on the Pico so that the data line uses the same voltage.
 
 ****<img width="1019" height="931" alt="image" src="https://github.com/user-attachments/assets/a192b125-d142-4798-9e24-b504a52fe4a1" />
 
