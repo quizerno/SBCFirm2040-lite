@@ -241,15 +241,21 @@ int main(void) {
         // =========================================================================
         // <<< TRANSMISSION FIX: Package and push data to physical endpoints >>>
         // =========================================================================
-        if (tud_ready()) {
+        if (tud_ready() && tud_hid_ready()) {
             uint8_t outbound_console_buffer[26];
             
-            // Format gp structures into the raw 26-byte payload matrix
-            pack_steel_battalion_report(outbound_console_buffer, gp);
+            if (current_input_source == 2) {
+                // If the physical controller is connected, copy its raw 26 bytes directly
+                // to eliminate layout discrepancies or calculation shift errors.
+                memcpy(outbound_console_buffer, pkt.report, 26);
+            } else {
+                // Fallback: Run standard serialization mapper for mice/keyboards/generic pads
+                pack_steel_battalion_report(outbound_console_buffer, gp);
+            }
             
+            // Broadcast the compiled hardware frame down endpoint 0
             tud_hid_report(0, outbound_console_buffer, 26);
         }
-		
 		
 		
 		
@@ -263,7 +269,10 @@ void apply_inputs_to_steel_battalion(Gamepad *gp,
 {
     memset(&gp->steel_battalion_in_report.dButtons, 0, sizeof(gp->steel_battalion_in_report.dButtons));
 	
-    // NATIVE PASSTHROUGH MAP
+	
+	// =========================================================================
+    // BRANCH 1: NATIVE PASSTHROUGH MAP (Physical or Emulated Steel Battalion Controller Connected)
+    // =========================================================================
     if (input_source == 2) {
         uint64_t b = sbc_data->bButtons;
 		//bool passthrough_buttons = (b & 0xFF) > 0; 
@@ -330,18 +339,25 @@ void apply_inputs_to_steel_battalion(Gamepad *gp,
         // <<< FIX: Explicitly sync the structure changes to the outbound buffer >>>
         // =========================================================================
         //gp->report_changed = true; 
-        //return;
+        return;
     }
     // ... Rest of Emulation translation map remains identical
 else{
 
-    // EMULATION TRANSLATION MAP
+    // =========================================================================
+    // BRANCH 2: EMULATION TRANSLATION MAP (Keyboard, Mouse, Standard Gamepads, Custom HID Devices, or Flightsticks/HOTAS)
+    // =========================================================================
+    // D-Pad / Hat Switch Cam Parsing
+	
+	//TO DO: Create input source identifier for gamepad and separate it from mouse and keyboard
+	
     if (pad_data->hat == 0) gp->steel_battalion_in_report.sightChangeY = -8000;
     if (pad_data->hat == 4) gp->steel_battalion_in_report.sightChangeY = 8000;
     
     if (is_key_pressed(KEY_A))      gp->steel_battalion_in_report.rotationLever = -32768; 
     else if (is_key_pressed(KEY_D)) gp->steel_battalion_in_report.rotationLever = 32767;  
     else                            gp->steel_battalion_in_report.rotationLever = 0;      
+
 
     if (input_source == 1) { 
         if (pad_data->buttons & (1 << 0)) gp->steel_battalion_in_report.dButtons.MainWeapon = true; 
@@ -350,6 +366,22 @@ else{
     } else {
         gp->steel_battalion_in_report.dButtons.MainWeapon = is_mouse_pressed(MOUSE_BUTTON_LEFT);
         gp->steel_battalion_in_report.dButtons.Fire       = is_mouse_pressed(MOUSE_BUTTON_RIGHT);
+		    accumulated_aim_x += (local_mouse_x * MOUSE_SENSITIVITY);
+    accumulated_aim_y += (local_mouse_y * MOUSE_SENSITIVITY);
+
+    if (accumulated_aim_x > 65535) accumulated_aim_x = 65535;
+    if (accumulated_aim_x < 0)     accumulated_aim_x = 0;
+    if (accumulated_aim_y > 65535) accumulated_aim_y = 65535;
+    if (accumulated_aim_y < 0)     accumulated_aim_y = 0;
+	
+	
+	
+	
+		
+		gp->steel_battalion_in_report.aimingX       = (uint16_t)accumulated_aim_x; 
+        gp->steel_battalion_in_report.aimingY 		= (uint16_t)accumulated_aim_y; 
+		
+		
     }
     
     gp->steel_battalion_in_report.dButtons.CockpitHatch = is_key_pressed(KEY_P);
@@ -357,6 +389,11 @@ else{
     gp->steel_battalion_in_report.dButtons.Ignition     = is_key_pressed(KEY_I);
     gp->steel_battalion_in_report.dButtons.Start        = is_key_pressed(KEY_ENTER);
 
+
+    // =========================================================================
+    // BRANCH 3: GPIO Readings (Direct Input to Adapter)
+    // =========================================================================
+	
     if (gpio_get(fireButtonPin) == 0) {
         gp->steel_battalion_in_report.dButtons.MainWeapon = true;
     }
@@ -395,12 +432,93 @@ void test_led(void) {
 }
 
 void pack_steel_battalion_report(uint8_t *out_buf, Gamepad *gp) {
+    // Clear out transmission container and assign tracking headers
     memset(out_buf, 0, 26);
-    out_buf[0] = 0x00; 
-    out_buf[1] = 0x14; 
-    // This branch leaves formatting logic clear for pure simulation mappings
-    (void)gp; 
+    out_buf[0] = 0x00; // Report ID Sequence
+    out_buf[1] = 0x1A; // Real XID Packet Descriptor Length Bounds (26 Bytes)
+
+    // Reconstruct the 3 button words byte-by-byte from the unpacked dButtons struct
+    uint16_t w0 = 0, w1 = 0, w2 = 0;
+
+    // Word 0 Mapping
+    if (gp->steel_battalion_in_report.dButtons.MainWeapon)   w0 |= (1 << 0);
+    if (gp->steel_battalion_in_report.dButtons.Fire)         w0 |= (1 << 1);
+    if (gp->steel_battalion_in_report.dButtons.LockOn)       w0 |= (1 << 2);
+    if (gp->steel_battalion_in_report.dButtons.Eject)        w0 |= (1 << 3);
+    if (gp->steel_battalion_in_report.dButtons.CockpitHatch) w0 |= (1 << 4);
+    if (gp->steel_battalion_in_report.dButtons.Ignition)     w0 |= (1 << 5);
+    if (gp->steel_battalion_in_report.dButtons.Start)        w0 |= (1 << 6);
+    if (gp->steel_battalion_in_report.dButtons.MultiMonitorOpenClose)   w0 |= (1 << 7);
+    if (gp->steel_battalion_in_report.dButtons.MultiMonitorMapZoomInOut) w0 |= (1 << 8);
+    if (gp->steel_battalion_in_report.dButtons.MultiMonitorModeSelect)  w0 |= (1 << 9);
+    if (gp->steel_battalion_in_report.dButtons.MultiMonitorSubMonitor)  w0 |= (1 << 10);
+    if (gp->steel_battalion_in_report.dButtons.MainMonitorZoomIn)       w0 |= (1 << 11);
+    if (gp->steel_battalion_in_report.dButtons.MainMonitorZoomOut)      w0 |= (1 << 12);
+    if (gp->steel_battalion_in_report.dButtons.ForecastShootingSystem)  w0 |= (1 << 13);
+    if (gp->steel_battalion_in_report.dButtons.Manipulator)          w0 |= (1 << 14);
+    if (gp->steel_battalion_in_report.dButtons.LineColorChange)      w0 |= (1 << 15);
+
+    // Word 1 Mapping
+    if (gp->steel_battalion_in_report.dButtons.Washing)           w1 |= (1 << 0);
+    if (gp->steel_battalion_in_report.dButtons.Extinguisher)      w1 |= (1 << 1);
+    if (gp->steel_battalion_in_report.dButtons.Chaff)             w1 |= (1 << 2);
+    if (gp->steel_battalion_in_report.dButtons.TankDetach)        w1 |= (1 << 3);
+    if (gp->steel_battalion_in_report.dButtons.Override)          w1 |= (1 << 4);
+    if (gp->steel_battalion_in_report.dButtons.NightScope)        w1 |= (1 << 5);
+    if (gp->steel_battalion_in_report.dButtons.Function1)         w1 |= (1 << 6);
+    if (gp->steel_battalion_in_report.dButtons.Function2)         w1 |= (1 << 7);
+    if (gp->steel_battalion_in_report.dButtons.Function3)         w1 |= (1 << 8);
+    if (gp->steel_battalion_in_report.dButtons.WeaponConMain)     w1 |= (1 << 9);
+    if (gp->steel_battalion_in_report.dButtons.WeaponConSub)      w1 |= (1 << 10);
+    if (gp->steel_battalion_in_report.dButtons.WeaponConMagazine) w1 |= (1 << 11);
+    if (gp->steel_battalion_in_report.dButtons.Comm1)             w1 |= (1 << 12);
+    if (gp->steel_battalion_in_report.dButtons.Comm2)             w1 |= (1 << 13);
+    if (gp->steel_battalion_in_report.dButtons.Comm3)             w1 |= (1 << 14);
+    if (gp->steel_battalion_in_report.dButtons.Comm4)             w1 |= (1 << 15);
+
+    // Word 2 Mapping
+    if (gp->steel_battalion_in_report.dButtons.Comm5)             w2 |= (1 << 0);
+    if (gp->steel_battalion_in_report.dButtons.SightChange)       w2 |= (1 << 1);
+    if (gp->steel_battalion_in_report.dButtons.ToggleFiltControl) w2 |= (1 << 2);
+    if (gp->steel_battalion_in_report.dButtons.ToggleOxygenSupply) w2 |= (1 << 3);
+    if (gp->steel_battalion_in_report.dButtons.ToggleFuelFlowRate) w2 |= (1 << 4);
+    if (gp->steel_battalion_in_report.dButtons.ToggleBufferMaterial) w2 |= (1 << 5);
+    if (gp->steel_battalion_in_report.dButtons.ToggleVTLocation)  w2 |= (1 << 6);
+
+    // Enforce validation bit
+    w2 |= 0x80; 
+
+    // Write button words into the transmission payload matrix
+    out_buf[2] = (uint8_t)(w0 & 0xFF);
+    out_buf[3] = (uint8_t)(w0 >> 8);
+    out_buf[4] = (uint8_t)(w1 & 0xFF);
+    out_buf[5] = (uint8_t)(w1 >> 8);
+    out_buf[6] = (uint8_t)(w2 & 0xFF);
+    out_buf[7] = (uint8_t)(w2 >> 8);
+
+    // Format 8-bit analog metrics back to 16-bit physical words
+    uint16_t ax = (uint16_t)gp->steel_battalion_in_report.aimingX << 8;
+    uint16_t ay = (uint16_t)gp->steel_battalion_in_report.aimingY << 8;
+    uint16_t rl = (uint16_t)gp->steel_battalion_in_report.rotationLever << 8;
+    uint16_t sx = (uint16_t)gp->steel_battalion_in_report.sightChangeX << 8;
+    uint16_t sy = (uint16_t)gp->steel_battalion_in_report.sightChangeY << 8;
+    uint16_t lp = (uint16_t)gp->steel_battalion_in_report.leftPedal << 8;
+    uint16_t mp = (uint16_t)gp->steel_battalion_in_report.middlePedal << 8;
+    uint16_t rp = (uint16_t)gp->steel_battalion_in_report.rightPedal << 8;
+
+    out_buf[8]  = (uint8_t)(ax & 0xFF);  out_buf[9]  = (uint8_t)(ax >> 8);
+    out_buf[10] = (uint8_t)(ay & 0xFF);  out_buf[11] = (uint8_t)(ay >> 8);
+    out_buf[12] = (uint8_t)(rl & 0xFF);  out_buf[13] = (uint8_t)(rl >> 8);
+    out_buf[14] = (uint8_t)(sx & 0xFF);  out_buf[15] = (uint8_t)(sx >> 8);
+    out_buf[16] = (uint8_t)(sy & 0xFF);  out_buf[17] = (uint8_t)(sy >> 8);
+    out_buf[18] = (uint8_t)(lp & 0xFF);  out_buf[19] = (uint8_t)(lp >> 8);
+    out_buf[20] = (uint8_t)(mp & 0xFF);  out_buf[21] = (uint8_t)(mp >> 8);
+    out_buf[22] = (uint8_t)(rp & 0xFF);  out_buf[23] = (uint8_t)(rp >> 8);
+
+    out_buf[24] = gp->steel_battalion_in_report.tunerDial & 0x0F;
+    out_buf[25] = gp->steel_battalion_in_report.gearLever;
 }
+
 
 // Custom app driver hook mapping table
 usbh_class_driver_t const* usbh_app_driver_get_cb(uint8_t* driver_count)

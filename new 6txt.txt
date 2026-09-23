@@ -1,0 +1,17 @@
+Let's resume debugging and compiling the Raspberry Pi Pico pure USB Host controller hub branch (sbc-hub-nxp4) for the SBCFirm2040-lite project.
+
+Current State & Architecture:
+1. Core 1 operates as a pure host. In `usb_host_callbacks.c`, `tuh_sbc_report_received_cb` pulls 26-byte hardware packets from `xid_itf->epin_buf` and pushes them across the cross-core `gamepad_packet_queue`.
+2. Core 0 intercepts this via `pkt.usage_id == 0x80`.
+3. The project compiles cleanly, and the console recognizes the connection, but the input translation is broken. 
+
+The Immediate Problems:
+1. Analog axes (joysticks, steering wheel, trackball, and foot pedals) are completely dead and unresponsive on the console side.
+2. The cockpit toggle switches and buttons are actively flickering on screen, meaning their states are being rapidly overwritten or poorly packed every frame pass.
+
+Where We Need to Start Next:
+We need to fix the data corruption causing the toggle flicker and dead analogs. We must inspect two areas:
+- STEP 2 & apply_inputs_to_steel_battalion: Ensure the raw 26-byte `rdata` array offsets match the structural expectations of `local_sbc_data_t` without being overwritten by generic mouse/keyboard translation passes.
+- Output serialization: Verify if `tud_hid_report(0, outbound_console_buffer, 26);` is conflicting with `gp->steel_battalion_in_report` updates, or if we should be using direct byte-piping (`memcpy`) from the input queue straight to the outbound endpoint for native mode.
+
+Help me audit the frame-by-frame data flow to stop the flickering and restore the analog axis readings.
