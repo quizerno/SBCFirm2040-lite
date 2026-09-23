@@ -108,20 +108,27 @@ void tuh_sbc_report_received_cb(uint8_t dev_addr, uint8_t instance, const uint8_
 
 
 
+
 void tuh_sbc_report_received_cb(uint8_t dev_addr, uint8_t instance, const uint8_t *report, uint16_t len) {
+    // 1. Cast pointer safely to capture the driver tracking frame wrapper
     const sbch_interface_t *xid_itf = (const sbch_interface_t *)report;
 
+    // 2. Build our inter-core message payload
     usb_packet_t sbc_pkt;
-    sbc_pkt.usage_id = 0x80;
+    sbc_pkt.usage_id = 0x80; 
     sbc_pkt.dev_addr = dev_addr;
     
-    sbc_pkt.len = 26; 
-    memcpy(sbc_pkt.report, xid_itf->epin_buf, 26);
+    // 3. SUCCESS FIX: Copy the pre-aligned driver structure directly.
+    // This bypasses any raw array parsing issues entirely.
+    sbc_pkt.len = sizeof(sbc_gamepad_t);
+    memcpy(sbc_pkt.report, &xid_itf->pad, sizeof(sbc_gamepad_t));
 
+    // Secure transit to Core 0
     queue_try_add(&gamepad_packet_queue, &sbc_pkt);
+
+    // Keep the polling pipeline active
     tuh_sbc_receive_report(dev_addr, instance);
 }
-
 
 
 

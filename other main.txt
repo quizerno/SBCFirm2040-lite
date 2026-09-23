@@ -95,10 +95,6 @@ int main(void) {
     init_tusb_gamepad(INPUT_MODE_XBOXORIGINAL);
     multicore_reset_core1();
     multicore_launch_core1(core1_usb_host_entry);
-	
-	tusb_rhport_init_t const device_init_config = {.role = TUSB_ROLE_DEVICE};
-    tusb_init(0, &device_init_config);
-	
 
     Gamepad *gp = gamepad(0);
     usb_packet_t pkt;
@@ -131,54 +127,51 @@ int main(void) {
         // =========================================================================
         if (queue_try_remove(&gamepad_packet_queue, &pkt)) {
 
-        // Direct Native/Emulated Steel Battalion Packet Tracking
-        if (pkt.usage_id == 0x80) {
-            // Clear the target translation register mapping space
-            memset(&local_sbc_data, 0, sizeof(local_sbc_data_t));
-            
-            // Interpret pkt.report directly as the raw 26-byte hardware stream
-            uint8_t const* rdata = (uint8_t const*)pkt.report;
+            // Direct Native/Emulated Steel Battalion Packet Tracking
+            if (pkt.usage_id == 0x80) {
+                // Clear the target translation register mapping space
+                memset(&local_sbc_data, 0, sizeof(local_sbc_data_t));
+                
+                // FIXED: Enforce a safe maximum buffer boundary cap to eliminate out-of-bounds compiler traps
+                uint32_t safe_copy_len = (pkt.len > sizeof(local_sbc_data_t)) ? sizeof(local_sbc_data_t) : pkt.len;
+                //memcpy(&local_sbc_data, pkt.report, safe_copy_len); 
+               // local_sbc_data.bButtons = ((sbc_gamepad_t*)pkt.report)->wButtons[0]; 
+			//	local_sbc_data.bAimingX = (uint8_t)(((sbc_gamepad_t*)pkt.report)->bAimingX >> 8); 
+			//	local_sbc_data.bAimingY = (uint8_t)(((sbc_gamepad_t*)pkt.report)->bAimingY >> 8);
+				                sbc_gamepad_t const* raw_p = (sbc_gamepad_t const*)pkt.report;
+						// 1. Unpack and combine the 3x 16-bit button words into a single 64-bit field
+local_sbc_data.bButtons = 0;
+local_sbc_data.bButtons |= ((uint64_t)raw_p->wButtons[0]);
+local_sbc_data.bButtons |= ((uint64_t)raw_p->wButtons[1] << 16);
+local_sbc_data.bButtons |= ((uint64_t)raw_p->wButtons[2] << 32);
 
-            // =========================================================================
-            // <<< FIXED MAPPING PARSER: Reconstruct fields matching your apply logic >>>
-            // =========================================================================
-            
-            // 1. Reconstruct the 64-bit button field aligned exactly with apply bitmasks
-            local_sbc_data.bButtons = 0;
-            local_sbc_data.bButtons |= ((uint64_t)rdata[2]);       // wButtons[0] LSB -> bit 0
-            local_sbc_data.bButtons |= ((uint64_t)rdata[3] << 8);  // wButtons[0] MSB -> bit 8
-            local_sbc_data.bButtons |= ((uint64_t)rdata[4] << 16); // wButtons[1] LSB -> bit 16
-            local_sbc_data.bButtons |= ((uint64_t)rdata[5] << 24); // wButtons[1] MSB -> bit 24
-            
-            // Reconstruct upper blocks cleanly, stripping the validation bit (0x80) safely
-            local_sbc_data.bButtons |= ((uint64_t)(rdata[6] & 0x7F) << 32); // wButtons[2] LSB -> bit 32
-            local_sbc_data.bButtons |= ((uint64_t)rdata[7] << 40); // wButtons[2] MSB -> bit 40
-
-            // 2. Map single-byte analog components from their raw 26-byte packet offsets
-            local_sbc_data.bAimingX       = rdata[9];   // Raw MSB alignment tracking
-            local_sbc_data.bAimingY       = rdata[11];  // Raw MSB alignment tracking
-            local_sbc_data.bRotationLever = rdata[13];  // Raw MSB alignment tracking
-            local_sbc_data.bSightChangeX  = rdata[15];  // Raw MSB alignment tracking
-            local_sbc_data.bSightChangeY  = rdata[17];  // Raw MSB alignment tracking
-
-            // 3. Map single-byte pedal analog channels
-            local_sbc_data.bLeftPedal     = rdata[19];  // Raw MSB alignment tracking
-            local_sbc_data.bMiddlePedal   = rdata[21];  // Raw MSB alignment tracking
-            local_sbc_data.bRightPedal    = rdata[23];  // Raw MSB alignment tracking
-
-            // 4. Map final state knobs and levers
-            local_sbc_data.bTunerDial     = rdata[24] & 0x0F; // Extract lower nibble safely
-            local_sbc_data.bGearLever     = rdata[25];        // Direct shifter mapping index
-			
-            sbc_input = true;
-            gamepad_activity = true;
-            current_input_source = 2;  
-        }
-     
-			
-			
-			
-			
+// 2. Downscale 16-bit analog channels to 8-bit metrics (Shift right by 8)
+local_sbc_data.bAimingX    = (uint8_t)(raw_p->bAimingX    >> 8);
+local_sbc_data.bAimingY    = (uint8_t)(raw_p->bAimingY    >> 8);
+local_sbc_data.bRotationX  = (uint8_t)(raw_p->bRotationX  >> 8);
+local_sbc_data.bSightX     = (uint8_t)(raw_p->bSightX     >> 8);
+local_sbc_data.bSightY     = (uint8_t)(raw_p->bSightY     >> 8);
+local_sbc_data.bLeftPedal  = (uint8_t)(raw_p->bLeftPedal  >> 8);
+local_sbc_data.bMiddlePedal= (uint8_t)(raw_p->bMiddlePedal>> 8);
+local_sbc_data.bRightPedal = (uint8_t)(raw_p->bRightPedal >> 8);
+local_sbc_data.bShiftLever = (uint8_t)(raw_p->bShiftLever >> 8);
+local_sbc_data.bGearLever  = (uint8_t)(raw_p->bGearLever  >> 8);
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				
+                sbc_input = true;
+                gamepad_activity = true;
+                current_input_source = 2;  
+            }          
                      
             // Fallback Generic Controllers (PS4, D-Input, Joysticks)
             else if (pkt.usage_id == 0x04 || pkt.usage_id == 0x05 || pkt.usage_id == 0x99) {
@@ -234,25 +227,7 @@ int main(void) {
         }
 
         // Keep internal translation layers active
-        // Keep internal translation layers active
         tusb_gamepad_task();
-        tud_task();
-
-        // =========================================================================
-        // <<< TRANSMISSION FIX: Package and push data to physical endpoints >>>
-        // =========================================================================
-        if (tud_ready()) {
-            uint8_t outbound_console_buffer[26];
-            
-            // Format gp structures into the raw 26-byte payload matrix
-            pack_steel_battalion_report(outbound_console_buffer, gp);
-            
-            tud_hid_report(0, outbound_console_buffer, 26);
-        }
-		
-		
-		
-		
     }
     return 0;
 }
@@ -266,9 +241,7 @@ void apply_inputs_to_steel_battalion(Gamepad *gp,
     // NATIVE PASSTHROUGH MAP
     if (input_source == 2) {
         uint64_t b = sbc_data->bButtons;
-		//bool passthrough_buttons = (b & 0xFF) > 0; 
 
-		//gp->steel_battalion_in_report.dButtons.MainWeapon   = (b & (1ULL << 0)) || passthrough_buttons;
         gp->steel_battalion_in_report.gearLever     = sbc_data->bGearLever;		
         gp->steel_battalion_in_report.sightChangeX  = sbc_data->bSightChangeX;
         gp->steel_battalion_in_report.sightChangeY  = sbc_data->bSightChangeY;
@@ -325,15 +298,8 @@ void apply_inputs_to_steel_battalion(Gamepad *gp,
         gp->steel_battalion_in_report.leftPedal     = sbc_data->bLeftPedal;
         gp->steel_battalion_in_report.middlePedal   = sbc_data->bMiddlePedal;
         gp->steel_battalion_in_report.rightPedal    = sbc_data->bRightPedal;
-
-        // =========================================================================
-        // <<< FIX: Explicitly sync the structure changes to the outbound buffer >>>
-        // =========================================================================
-        //gp->report_changed = true; 
-        //return;
+        return;
     }
-    // ... Rest of Emulation translation map remains identical
-else{
 
     // EMULATION TRANSLATION MAP
     if (pad_data->hat == 0) gp->steel_battalion_in_report.sightChangeY = -8000;
@@ -360,8 +326,6 @@ else{
     if (gpio_get(fireButtonPin) == 0) {
         gp->steel_battalion_in_report.dButtons.MainWeapon = true;
     }
-}
-	
 }
 void core1_usb_host_entry(void) {
     sleep_ms(10);
@@ -418,39 +382,4 @@ usbh_class_driver_t const* usbh_app_driver_get_cb(uint8_t* driver_count)
 
     *driver_count = 1;
     return &custom_driver;
-}
-
-
-// Force this array structure into your Core 0 device descriptor configuration:
-const uint8_t sbc_xid_descriptor[] = {
-    0x10, 0x42, 0x00, 0x01, 0x01, 0x02, 0x00, 0x06, 
-    0x5E, 0x04, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00
-};
-
-
-bool tud_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_request_t const * request) 
-{
-    (void) rhport;
-    if (stage != CONTROL_STAGE_SETUP) return true;
-
-    // Intercept Original Xbox XID Vendor Requests
-    if (request->bmRequestType == 0xC1 && request->bRequest == 0x01) 
-    {
-        if (request->wValue == 0x0100) 
-        { 
-            // Inbound Capabilities Request
-            static const uint8_t sbc_caps[] = { 0x06, 0x01, 0x00, 0x02, 0x14, 0x00 };
-            tud_control_xfer(rhport, request, (void*)(uintptr_t)sbc_caps, sizeof(sbc_caps));
-            return true;
-        }
-        else if (request->wValue == 0x0200) 
-        { 
-            // Inbound Extended Configuration Stream
-            static const uint8_t sbc_ext_cfg[] = { 0x09, 0x02, 0x20, 0x00, 0x01, 0x01, 0x00, 0x80, 0x14 };
-            tud_control_xfer(rhport, request, (void*)(uintptr_t)sbc_ext_cfg, sizeof(sbc_ext_cfg));
-            return true;
-        }
-    }
-    
-    return true; 
 }
