@@ -1,0 +1,23 @@
+    if (dynamic_pad_active) {
+        // 1. Map Main Joystick (LX/LY) to Aiming crosshairs
+        int16_t joy_x = (abs(pad_data->lx) > 15) ? pad_data->lx : 0;
+        int16_t joy_y = (abs(pad_data->ly) > 15) ? pad_data->ly : 0;
+        gp->steel_battalion_in_report.aimingX = (uint16_t)((joy_x + 128) << 8);
+        gp->steel_battalion_in_report.aimingY = (uint16_t)((joy_y + 128) << 8);
+
+        // 2. Map Twist Rudder Axis (RX) to your Mech's Rotation/Steering Lever
+        int16_t rudder = (abs(pad_data->rx) > 15) ? pad_data->rx : 0;
+        // Shift -128..127 to fully utilize the Steel Battalion steering bounds (-32768 to 32767)
+        gp->steel_battalion_in_report.rotationLever = (int16_t)(rudder << 8);
+
+        // 3. Map the Physical Throttle Lever (RY) to the Mech's main Gear/Throttle slider
+        // RY is 0 at full forward throttle, 128 at center detent, and 255 at full reverse
+        int16_t throttle_val = pad_data->ry; 
+        // Convert to a custom layout format matching your target emulator engine layout...
+
+        // 4. Map the Trigger (Cross) and Main Flight Buttons smoothly
+        if (pad_data->buttons & (1 << 0)) gp->steel_battalion_in_report.dButtons.MainWeapon = true; // Trigger
+        if (pad_data->buttons & (1 << 1)) gp->steel_battalion_in_report.dButtons.Fire       = true; // Thumb button
+    }
+
+

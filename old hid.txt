@@ -1,0 +1,51 @@
+// =========================================================================
+// GATE 3: HID MOUNT CALLBACK
+// =========================================================================
+void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const* desc_report, uint16_t desc_len) {
+    uint8_t const itf_protocol = tuh_hid_interface_protocol(dev_addr, instance);
+    uint8_t usage_id = 0;
+    uint16_t vid = 0, pid = 0;
+    tuh_vid_pid_get(dev_addr, &vid, &pid);
+
+    // =========================================================================
+    // Maintain your standard lookup tracks for commercial equipment
+    // =========================================================================
+    if ((vid == 0x0A7B && pid == 0xD000) || (vid == 0x045E && pid == 0x0289)) {
+        usage_id = 0x04; 
+    }
+    else if (vid == 0x054c && (pid == 0x09cc || pid == 0x05c4)) {
+        usage_id = 0x99; 
+    } 
+    else if (itf_protocol == HID_ITF_PROTOCOL_NONE) {
+        tuh_hid_report_info_t report_info[3]; 
+        uint8_t report_count = tuh_hid_parse_report_descriptor(report_info, 3, desc_report, desc_len);
+        for (uint8_t i = 0; i < report_count; i++) {
+            if (report_info[i].usage_page == 0x01) { 
+                if (report_info[i].usage == 0x02) { usage_id = HID_ITF_PROTOCOL_MOUSE; break; }
+                else if (report_info[i].usage == 0x04 || report_info[i].usage == 0x05) { usage_id = report_info[i].usage; break; }
+            }
+        }
+    } else {
+        usage_id = itf_protocol;
+        test_led();
+    }
+
+    if (usage_id == 0) return;
+
+    for (int i = 0; i < 3; i++) {
+        if (device_activation_queue[i].dev_addr == 0) {
+            device_activation_queue[i].dev_addr = dev_addr;
+            device_activation_queue[i].instance = instance;
+            device_activation_queue[i].usage_id = usage_id; 
+            device_activation_queue[i].needs_activation = true; 
+            break;
+        }
+    }
+}
+
+
+
+
+
+
+

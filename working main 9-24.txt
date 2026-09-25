@@ -1,3 +1,5 @@
+working main
+
 #define CFG_TUH_ENABLED 1
 #include "tusb.h"
 #include "host/usbh_pvt.h" 
@@ -106,9 +108,6 @@ int main(void) {
 
     Gamepad *gp = gamepad(0);
     usb_packet_t pkt;
-	
-	local_sbc_data_t local_sbc_data = {0};
-    bool state_has_changed = false;
 
     while (1) {
         // =========================================================================
@@ -131,7 +130,7 @@ int main(void) {
 		
         generic_gamepad_data_t local_joy_data = {0};
         local_joy_data.hat = 8; 
-		state_has_changed = false;
+        local_sbc_data_t local_sbc_data = {0};
         // =========================================================================
         // STEP 2: CROSS-CORE PAYLOAD RETRIEVAL & TARGET RECOGNITION (CORE 0 ROLE)
         // =========================================================================
@@ -169,8 +168,7 @@ int main(void) {
 
                 sbc_input = true;
                 gamepad_activity = true;
-                current_input_source = 2;
-				 state_has_changed = true; 
+                current_input_source = 2;  
             }
             // Fallback Generic Controllers (PS4, D-Input, Joysticks)
             else if (pkt.usage_id == 0x04 || pkt.usage_id == 0x05 || pkt.usage_id == 0x99) {
@@ -180,11 +178,7 @@ int main(void) {
                     bool analog_sticks_active = (abs(local_joy_data.lx) > 15) || (abs(local_joy_data.ly) > 15);
                     
                     gamepad_activity = button_or_hat_active || analog_sticks_active;
-                    if (gamepad_activity) {
-						
-						current_input_source = 1;
-						 state_has_changed = true; 
-					}
+                    if (gamepad_activity) current_input_source = 1;
                 }
             }
         }
@@ -194,13 +188,7 @@ int main(void) {
         // =========================================================================
         // STEP 3: EMULATION TRANSLATION AND PASSTHROUGH INTERPRETER
         // =========================================================================
-       // apply_inputs_to_steel_battalion(gp, &local_joy_data, &local_sbc_data, current_input_source);
-
-        // Only parse mapping configurations if there is an active input event
-        if (state_has_changed || current_input_source == 2) {
-            apply_inputs_to_steel_battalion(gp, &local_joy_data, &local_sbc_data, current_input_source);
-        }
-
+        apply_inputs_to_steel_battalion(gp, &local_joy_data, &local_sbc_data, current_input_source);
 
         // =========================================================================
         // STEP 4: ACTIVITY MONITOR & HARDWARE SIGNALING GATES

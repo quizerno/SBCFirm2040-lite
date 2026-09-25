@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define MJ9K_BUTTON_COUNT 48
+
+
 // Standard layout structure for a Native Steel Battalion Controller report packet
 typedef struct TU_ATTR_PACKED {
     uint8_t  report_id;          // Typically 0x01
@@ -55,7 +58,7 @@ typedef struct {
 } sbc_data_t; */
 
 
-typedef struct __attribute__((packed)) {
+/* typedef struct __attribute__((packed)) {
     uint64_t bButtons;
     uint8_t  bRotationLever;
     uint8_t  bSightChangeX;
@@ -68,8 +71,24 @@ typedef struct __attribute__((packed)) {
     uint8_t  bTunerDial;
     uint8_t  bGearLever;
 } local_sbc_data_t;
+ */
 
 
+typedef struct __attribute__((packed)) {
+    uint8_t  zero;           // Padding/Report identifier metadata
+    uint8_t  bLength;        // 26-byte tracking packet length
+    uint16_t buttons[MJ9K_BUTTON_COUNT / 16]; // 3 blocks of 16-bit packed discrete states
+    uint16_t aimingX;        // 0 to 0xFFFF (Left to Right)
+    uint16_t aimingY;        // 0 to 0xFFFF (Top to Bottom)
+    int16_t  turningLever;   // Signed rotational deviation axis
+    int16_t  sightChangeX;   // Signed relative trackball component
+    int16_t  sightChangeY;   // Signed relative trackball component
+    uint16_t slidePedal;     // Left Pedal (Clutch/Sidestep): 0x0000 to 0xFF00
+    uint16_t brakePedal;     // Middle Pedal (Brake): 0x0000 to 0xFF00
+    uint16_t accelPedal;     // Right Pedal (Gas): 0x0000 to 0xFF00
+    uint8_t  tuner;          // Discrete dial state (0-15 clockwise)
+    int8_t   shifter;        // Signed sequential index (-2 to 5)
+} local_sbc_data_t;          // Swapped cleanly to match mj9k_in_report
 
 
 
