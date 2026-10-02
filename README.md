@@ -1,4 +1,4 @@
-# SBCFirm2040-lite
+# SBCFirm2040-lite (CURRENTLY WIP)
 
 Seel Battalion Controller Firmware for the RP2040 with Input Options. This enables you to emulate a Steel Battalion Controller on Xbox.
 The options it includes are:
