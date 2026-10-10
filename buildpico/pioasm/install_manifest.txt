@@ -1,0 +1,5 @@
+/home/avi/SBCFirm2040-lite/buildpico/pioasm-install/pioasm/pioasm
+/home/avi/SBCFirm2040-lite/buildpico/pioasm-install/pioasm/pioasmTargets.cmake
+/home/avi/SBCFirm2040-lite/buildpico/pioasm-install/pioasm/pioasmTargets-release.cmake
+/home/avi/SBCFirm2040-lite/buildpico/pioasm-install/pioasm/pioasmConfig.cmake
+/home/avi/SBCFirm2040-lite/buildpico/pioasm-install/pioasm/pioasmConfigVersion.cmake

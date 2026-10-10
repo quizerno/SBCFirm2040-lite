@@ -34,6 +34,31 @@ int32_t accumulated_aim_x = 32767;
 int32_t accumulated_aim_y = 32767;
 int t = 0; 
 
+
+
+
+//Input Source Identifiers
+#define INPUT_SOURCE_SBC      0  // Steel Battalion Controller (Real or Native Emulator)
+#define INPUT_SOURCE_KBM      1  // Default/Primary Keyboard and Mouse Profile
+#define INPUT_SOURCE_JOYSTICK 2  // Generic USB HID Gamepads, Flightsticks, Throttles
+// Custom Devices
+#define INPUT_SOURCE_A 3  
+#define INPUT_SOURCE_B 4 
+
+
+//TinyUSB can be configured to handle more than 4 USB Devices.
+//Further testing to be done.
+//https://docs.tinyusb.org/en/latest/examples/host/device_info.html
+//https://docs.tinyusb.org/en/latest/faq.html
+
+
+//TO DO: add two dimensional array that keeps track of VID/PID in use and adds a serial number
+//This will be used to differentiate between two or more different devices that use the same VID/PID with a function.
+//The function: If it detects a duplicate VID/PID then it will check if the serial number is the same.
+//if the serial number is different, it will recognize that the device is unique and assign a unique input identifier to it.
+//However the logic MUST IGNORE the Steel Battalion VID/PID because all Steel Battalion Devices get the same input code
+
+
 queue_t gamepad_packet_queue;
 
 
@@ -44,6 +69,8 @@ queue_t gamepad_packet_queue;
 bool led_feedback_enable = true;
 volatile sbc_leds_t cockpit_led_registry = {0};
 
+
+//LED FEEDBACK CODE NOT YET IMPLIMENTED
 /**
  * Safely extracts a 4-bit intensity value (0-15) from a raw packed byte array.
  * Eliminates individual structure member field checks.
@@ -57,15 +84,6 @@ static inline uint8_t get_led_level_by_index(uint8_t const* raw_bytes, uint8_t l
     }
 }
 
-// Forward Declarations
-void apply_inputs_to_steel_battalion(Gamepad *gp, 
-                                     generic_gamepad_data_t const* pad_data, 
-                                     local_sbc_data_t const* sbc_data, 
-                                     uint8_t input_source);
-void test_led(void);									 
-void core1_usb_host_entry(void);
-void pack_steel_battalion_report(uint8_t *out_buf, Gamepad *gp);
-
 // Structural mapping target configuration for internal layout workspaces
 typedef struct __attribute__((packed)) {
     uint8_t led_data[20]; 
@@ -77,6 +95,21 @@ void process_xbox_led_packet(uint8_t const* payload, uint16_t len) {
     memcpy(&temporary_led_map, payload, sizeof(sbc_leds_t));
     cockpit_led_registry = temporary_led_map;
 }
+
+//not yet implemented
+
+
+
+// Forward Declarations
+void apply_inputs_to_steel_battalion(Gamepad *gp, 
+                                     generic_gamepad_data_t const* pad_data, 
+                                     local_sbc_data_t const* sbc_data, 
+                                     uint8_t input_source);
+void test_led(void);									 
+void core1_usb_host_entry(void);
+void pack_steel_battalion_report(uint8_t *out_buf, Gamepad *gp);
+
+
 int main(void) {
     set_sys_clock_khz(120000, true);
     sleep_ms(10); 
@@ -106,11 +139,17 @@ int main(void) {
 
     Gamepad *gp = gamepad(0);
     usb_packet_t pkt;
+	generic_gamepad_data_t local_joy_data = {0};
+    local_joy_data.hat = 8; 
 	
 	local_sbc_data_t local_sbc_data = {0};
     bool state_has_changed = false;
-
+	uint8_t current_input_source = INPUT_SOURCE_SBC; 
     while (1) {
+		
+		
+		//TO DO: Decide if this format for KBM is good or if we want the packets to be handled differently
+		
         // =========================================================================
         // STEP 1: HOISTED RESET MATRIX (Runs first, at the top of every frame pass)
         // =========================================================================
@@ -127,52 +166,83 @@ int main(void) {
 
         bool gamepad_activity = false;
         bool sbc_input        = false; 
-        uint8_t current_input_source = 0; 
-		
-        generic_gamepad_data_t local_joy_data = {0};
-        local_joy_data.hat = 8; 
+		//current_input_source = INPUT_SOURCE_KBM; 		
+
 		state_has_changed = false;
         // =========================================================================
         // STEP 2: CROSS-CORE PAYLOAD RETRIEVAL & TARGET RECOGNITION (CORE 0 ROLE)
         // =========================================================================
         if (queue_try_remove(&gamepad_packet_queue, &pkt)) {
+            
+            // ---------------------------------------------------------------------
+            // DEVELOPER CUSTOMIZATION ENGINE: VID/PID Profiling & Isolation
+            // ---------------------------------------------------------------------
+            uint16_t dev_vid = 0;
+            uint16_t dev_pid = 0;
+			
+			
+			//Set the PID/VID of the devices you wish to use
+			 uint16_t usr_vid_a = 0x046D;
+			 uint16_t usr_pid_a = 0xC016;
+			 
+			 uint16_t usr_vid_b = 0x413C;
+			 uint16_t usr_pid_b = 0x301A;
+			 
+            
+            // Query TinyUSB to pull device parameters based on current packet address
+            if (pkt.dev_addr != 0) {
+                tuh_vid_pid_get(pkt.dev_addr, &dev_vid, &dev_pid);            }
+            
+            // COMMENTED OUT PROFILING TEMPLATE: Enable these to handle multiple KBM/Joystick setups
+			//This is to make sure two HID devices do not overlap inputs
+			//For example if you have two joysticks that both have button1 you can differentiate
+            
+            // Profile A: Isolate custom device A
+            if (dev_vid == usr_vid_a && dev_pid == usr_pid_a) { 
+                current_input_source = INPUT_SOURCE_A;
+                state_has_changed = true;
+            }
+            
+            // Profile B: Isolate custom device B
+            if (dev_vid == usr_vid_b && dev_pid == usr_pid_b) { 
+                current_input_source = INPUT_SOURCE_B;
+                state_has_changed = true;
+            }
+            
+            //Add more profiles as needed with corresponding variables 
+            
+           
 
-            // Direct Native/Emulated Steel Battalion Packet Tracking
+            // Intercept Original or Native-Mode Emulated Steel Battalion Devices
             if (pkt.usage_id == 0x80) {
-                // 1. Overlay our structural layout directly on top of the raw incoming 26-byte pointer
                 local_sbc_data_t const* incoming_frame = (local_sbc_data_t const*)pkt.report;
 
-                // 2. Perform safe, atomic, structured copies without clearing memory via memset
                 local_sbc_data.zero         = incoming_frame->zero;
                 local_sbc_data.bLength      = incoming_frame->bLength;
                 
-                // Copy the structural button matrix blocks contiguously
                 local_sbc_data.buttons[0]   = incoming_frame->buttons[0];
                 local_sbc_data.buttons[1]   = incoming_frame->buttons[1];
                 local_sbc_data.buttons[2]   = incoming_frame->buttons[2];
 
-                // 3. Directly map 16-bit analog joystick and lever coordinates
                 local_sbc_data.aimingX      = incoming_frame->aimingX;
                 local_sbc_data.aimingY      = incoming_frame->aimingY;
                 local_sbc_data.turningLever = incoming_frame->turningLever;
                 local_sbc_data.sightChangeX = incoming_frame->sightChangeX;
                 local_sbc_data.sightChangeY = incoming_frame->sightChangeY;
 
-                // 4. Map the full 16-bit discrete pedal channels
                 local_sbc_data.slidePedal   = incoming_frame->slidePedal;
                 local_sbc_data.brakePedal   = incoming_frame->brakePedal;
                 local_sbc_data.accelPedal   = incoming_frame->accelPedal;
 
-                // 5. Final discrete selector mapping layout
                 local_sbc_data.tuner        = incoming_frame->tuner;
                 local_sbc_data.shifter      = incoming_frame->shifter;
 
                 sbc_input = true;
                 gamepad_activity = true;
-                current_input_source = 2;
-				 state_has_changed = true; 
+                current_input_source = INPUT_SOURCE_SBC; 
+                state_has_changed = true; 
             }
-            // Fallback Generic Controllers (PS4, D-Input, Joysticks)
+            // Route Standard Generic HID Controllers & Flightsticks
             else if (pkt.usage_id == 0x04 || pkt.usage_id == 0x05 || pkt.usage_id == 0x99) {
                 bool parsed_ok = route_and_parse_gamepad(pkt.report, pkt.len, pkt.dev_addr, &local_joy_data);
                 if (parsed_ok) {
@@ -181,29 +251,22 @@ int main(void) {
                     
                     gamepad_activity = button_or_hat_active || analog_sticks_active;
                     if (gamepad_activity) {
-						
-						current_input_source = 1;
-						 state_has_changed = true; 
-					}
+                        // Keep manual overrides intact if developer profiling above is disabled
+                        if (current_input_source != INPUT_SOURCE_A && current_input_source != INPUT_SOURCE_B) {
+                            current_input_source = INPUT_SOURCE_JOYSTICK;
+                        }
+                        state_has_changed = true; 
+                    }
                 }
             }
         }
 
 
 
-        // =========================================================================
-        // STEP 3: EMULATION TRANSLATION AND PASSTHROUGH INTERPRETER
-        // =========================================================================
-       // apply_inputs_to_steel_battalion(gp, &local_joy_data, &local_sbc_data, current_input_source);
-
-        // Only parse mapping configurations if there is an active input event
-        if (state_has_changed || current_input_source == 2) {
-            apply_inputs_to_steel_battalion(gp, &local_joy_data, &local_sbc_data, current_input_source);
-        }
 
 
         // =========================================================================
-        // STEP 4: ACTIVITY MONITOR & HARDWARE SIGNALING GATES
+        // STEP 3: ACTIVITY MONITOR & HARDWARE SIGNALING GATES
         // =========================================================================
         bool key_active = false;
         for (int i = 0; i < 6; i++) { 
@@ -217,76 +280,93 @@ int main(void) {
 		
         if (key_active || local_modifiers != 0 || mouse_active || gamepad_activity || gpio_active || sbc_input) {
             gpio_put(PICO_LED_PIN, 1);
+            if (mouse_active || key_active || gpio_active) {
+                // Assign to standard profile only if an isolated sub-profile hasn't claimed it yet
+                if (!sbc_input && !gamepad_activity && current_input_source == INPUT_SOURCE_KBM) {
+                    current_input_source = INPUT_SOURCE_KBM; 
+                }
+                state_has_changed = true;
+            }
         } else {
             gpio_put(PICO_LED_PIN, 0);
         }
-
+		
+		
+		        // =========================================================================
+        // STEP 4: EMULATION TRANSLATION AND PASSTHROUGH INTERPRETER
         // =========================================================================
-        // STEP 5: LED EXTRACTION STREAM HANDLING
-        // =========================================================================
-        if (led_feedback_enable) {
-            sbc_leds_t current_led_frame = cockpit_led_registry;
-            uint8_t cockpit_brightness_matrix[38]; 
-            uint8_t const* raw_led_stream = (uint8_t const*)&current_led_frame;
+       // apply_inputs_to_steel_battalion(gp, &local_joy_data, &local_sbc_data, current_input_source);
 
-            for (uint8_t i = 0; i < 38; i++) {
-                uint8_t raw_level = get_led_level_by_index(raw_led_stream, i);
-                cockpit_brightness_matrix[i] = raw_level;
-            }
-            (void)cockpit_brightness_matrix; // Warning gate bypass
+        // Only parse mapping configurations if there is an active input event
+		//|| current_input_source == 2
+        if (state_has_changed ) {
+            apply_inputs_to_steel_battalion(gp, &local_joy_data, &local_sbc_data, current_input_source);
         }
 
-        // Keep internal translation layers active
+		
+		
+		
+
+        // =========================================================================
+        // STEP 3: EMULATION TRANSLATION AND PASSTHROUGH INTERPRETER
+        // =========================================================================
+		
+		//see if this is necessary or not
+/*         if (state_has_changed || current_input_source == INPUT_SOURCE_SBC) {
+            apply_inputs_to_steel_battalion(gp, &local_joy_data, &local_sbc_data, current_input_source);
+        } */
+
         tusb_gamepad_task();
         tud_task();
 
         // =========================================================================
-        // TRANSMISSION GATEWAY: Unified structural compilation pipeline
-        // =========================================================================
-/*         if (tud_ready() && tud_hid_ready()) {
-            uint8_t outbound_console_buffer[26];
-            bool straight_passthrough = false; // System control override toggle state
-
-            if (straight_passthrough && current_input_source == 2) {
-                // True emergency hardware bypass (ignores all translation/emulation)
-                memcpy(outbound_console_buffer, pkt.report, 26);
-            } else {
-                // UNIFIED PATH: Processes both emulated AND physical inputs through gp
-                pack_steel_battalion_report(outbound_console_buffer, gp);
-            }
-            
-            // Broadcast the compiled hardware frame down endpoint 0
-            tud_hid_report(0, outbound_console_buffer, 26);
-        } */
+        // TRANSMISSION GATEWAY: Safe Gated Output Processing Loop
+       // =========================================================================
 		
+		//Only uncommented if you want direct passthrough
 		
-		
-    }//end while
+        // if (tud_ready() && tud_hid_ready() && state_has_changed) {
+            // uint8_t outbound_console_buffer[26];
+            // pack_steel_battalion_report(outbound_console_buffer, gp);
+            // tud_hid_report(0, outbound_console_buffer, 26);
+        // }
+    } // end while
     return 0;
-}//end main
+} // end main
+
 
 
 void apply_inputs_to_steel_battalion(Gamepad *gp, 
                                      generic_gamepad_data_t const* pad_data, 
                                      local_sbc_data_t const* sbc_data, 
-                                     uint8_t input_source) {
+                                     uint8_t input_source) 
+{
     // Clear out active digital configurations prior to performing calculation passes
+	//
     memset(&gp->steel_battalion_in_report.dButtons, 0, sizeof(gp->steel_battalion_in_report.dButtons));
 	
+	
+	
+	// =========================================================================
+    // GPIO INPUTS: INPUTS DIRECTLY CONNECTED TO THE CONTROLLER
     // =========================================================================
-    // BRANCH 1: NATIVE PASSTHROUGH MAP (Physical Steel Battalion Controller Connected)
-    // =========================================================================
-    if (input_source == 2) {
-        // Cache the 16-bit button block states locally
-        uint16_t w0 = sbc_data->buttons[0];
-        uint16_t w1 = sbc_data->buttons[1];
-        uint16_t w2 = sbc_data->buttons[2];
+    // Always scan manual structural GPIO line overrides first
+	//
+    if (gpio_get(fireButtonPin) == 0) {
+        gp->steel_battalion_in_report.dButtons.MainWeapon = true;
+    }
 
-        // Direct Shifter & Dial Sync
+    // =========================================================================
+    // CHANNEL 0: NATIVE PHYSICAL PASSTHROUGH CONFIGURATION
+    // =========================================================================
+    else if (input_source == INPUT_SOURCE_SBC) {
+        uint16_t w0 = sbc_data->buttons[0]; uint16_t w1 = sbc_data->buttons[1]; uint16_t w2 = sbc_data->buttons[2];
+		
+		//Gear Lever and Tuner
         gp->steel_battalion_in_report.gearLever     = sbc_data->shifter;		
         gp->steel_battalion_in_report.tunerDial     = sbc_data->tuner;
 
-        // Map Word 0 Buttons
+        // Word 0 Buttons
         gp->steel_battalion_in_report.dButtons.MainWeapon   = (w0 & (1 << 0)) ? true : false;
         gp->steel_battalion_in_report.dButtons.Fire         = (w0 & (1 << 1)) ? true : false;
         gp->steel_battalion_in_report.dButtons.LockOn       = (w0 & (1 << 2)) ? true : false;
@@ -304,7 +384,7 @@ void apply_inputs_to_steel_battalion(Gamepad *gp,
         gp->steel_battalion_in_report.dButtons.Manipulator          = (w0 & (1 << 14)) ? true : false;
         gp->steel_battalion_in_report.dButtons.LineColorChange      = (w0 & (1 << 15)) ? true : false;
 
-        // Map Word 1 Buttons
+        // Word 1 Buttons
         gp->steel_battalion_in_report.dButtons.Washing              = (w1 & (1 << 0)) ? true : false;
         gp->steel_battalion_in_report.dButtons.Extinguisher         = (w1 & (1 << 1)) ? true : false;
         gp->steel_battalion_in_report.dButtons.Chaff                = (w1 & (1 << 2)) ? true : false;
@@ -322,7 +402,7 @@ void apply_inputs_to_steel_battalion(Gamepad *gp,
         gp->steel_battalion_in_report.dButtons.Comm3                = (w1 & (1 << 14)) ? true : false;
         gp->steel_battalion_in_report.dButtons.Comm4                = (w1 & (1 << 15)) ? true : false;
 
-        // Map Word 2 Buttons
+        // Word 2 Buttons
         gp->steel_battalion_in_report.dButtons.Comm5                = (w2 & (1 << 0)) ? true : false;
         gp->steel_battalion_in_report.dButtons.SightChange          = (w2 & (1 << 1)) ? true : false;
         gp->steel_battalion_in_report.dButtons.ToggleFiltControl    = (w2 & (1 << 2)) ? true : false;
@@ -331,79 +411,77 @@ void apply_inputs_to_steel_battalion(Gamepad *gp,
         gp->steel_battalion_in_report.dButtons.ToggleBufferMaterial = (w2 & (1 << 5)) ? true : false;
         gp->steel_battalion_in_report.dButtons.ToggleVTLocation     = (w2 & (1 << 6)) ? true : false;
 
-        // Map 16-Bit Analogs 1:1 Without Modification
+
+		//Analogue
         gp->steel_battalion_in_report.aimingX       = sbc_data->aimingX;
         gp->steel_battalion_in_report.aimingY       = sbc_data->aimingY;
         gp->steel_battalion_in_report.rotationLever = sbc_data->turningLever;
         gp->steel_battalion_in_report.sightChangeX  = sbc_data->sightChangeX;
         gp->steel_battalion_in_report.sightChangeY  = sbc_data->sightChangeY;
         
-        // Map 16-Bit Pedals 1:1 Without Modification
         gp->steel_battalion_in_report.leftPedal     = sbc_data->slidePedal;
         gp->steel_battalion_in_report.middlePedal   = sbc_data->brakePedal;
         gp->steel_battalion_in_report.rightPedal    = sbc_data->accelPedal;
-        return;
-    }
-/*     // =========================================================================
-    // BRANCH 2: EMULATION TRANSLATION MAP (Keyboard, Mouse, Standard Gamepads)
+    } 
     // =========================================================================
-    else {
-        if (pad_data->hat == 0) gp->steel_battalion_in_report.sightChangeY = -8000;
-        if (pad_data->hat == 4) gp->steel_battalion_in_report.sightChangeY = 8000;
-        
+    // CHANNEL 1: STANDARD USER KEYBOARD AND MOUSE MAP Profile
+    // =========================================================================
+    else if (input_source == INPUT_SOURCE_KBM) {
         if (is_key_pressed(KEY_A))      gp->steel_battalion_in_report.rotationLever = -32768; 
         else if (is_key_pressed(KEY_D)) gp->steel_battalion_in_report.rotationLever = 32767;  
-        else                            gp->steel_battalion_in_report.rotationLever = 0;      
-
-        if (input_source == 1) { 
-            if (pad_data->buttons & (1 << 0)) gp->steel_battalion_in_report.dButtons.MainWeapon = true; 
-            if (pad_data->buttons & (1 << 1)) gp->steel_battalion_in_report.dButtons.Fire       = true; 
-            if (pad_data->buttons & (1 << 3)) gp->steel_battalion_in_report.dButtons.LockOn     = true; 
-        } else {
-            gp->steel_battalion_in_report.dButtons.MainWeapon = is_mouse_pressed(MOUSE_BUTTON_LEFT);
-            gp->steel_battalion_in_report.dButtons.Fire       = is_mouse_pressed(MOUSE_BUTTON_RIGHT);
-            
-            accumulated_aim_x += (local_mouse_x * MOUSE_SENSITIVITY);
-            accumulated_aim_y += (local_mouse_y * MOUSE_SENSITIVITY);
-
-            if (accumulated_aim_x > 65535) accumulated_aim_x = 65535;
-            if (accumulated_aim_x < 0)     accumulated_aim_x = 0;
-            if (accumulated_aim_y > 65535) accumulated_aim_y = 65535;
-            if (accumulated_aim_y < 0)     accumulated_aim_y = 0;
-            
-            gp->steel_battalion_in_report.aimingX = (uint16_t)accumulated_aim_x; 
-            gp->steel_battalion_in_report.aimingY = (uint16_t)accumulated_aim_y; 
-        }
+        
+       // gp->steel_battalion_in_report.dButtons.MainWeapon = is_mouse_pressed(MOUSE_BUTTON_LEFT);
+       // gp->steel_battalion_in_report.dButtons.Fire       = is_mouse_pressed(MOUSE_BUTTON_RIGHT);
+        
+        accumulated_aim_x += (local_mouse_x * MOUSE_SENSITIVITY);
+        accumulated_aim_y += (local_mouse_y * MOUSE_SENSITIVITY);
+        if (accumulated_aim_x > 65535) accumulated_aim_x = 65535; if (accumulated_aim_x < 0) accumulated_aim_x = 0;
+        if (accumulated_aim_y > 65535) accumulated_aim_y = 65535; if (accumulated_aim_y < 0) accumulated_aim_y = 0;
+        
+        gp->steel_battalion_in_report.aimingX = (uint16_t)accumulated_aim_x; 
+        gp->steel_battalion_in_report.aimingY = (uint16_t)accumulated_aim_y; 
         
         gp->steel_battalion_in_report.dButtons.CockpitHatch = is_key_pressed(KEY_P);
         gp->steel_battalion_in_report.dButtons.Eject        = is_key_pressed(KEY_SPACE);
         gp->steel_battalion_in_report.dButtons.Ignition     = is_key_pressed(KEY_I);
         gp->steel_battalion_in_report.dButtons.Start        = is_key_pressed(KEY_ENTER);
-		
+    }
+	
 	// =========================================================================
-    // BRANCH 3: GPIO Readings (Direct Input to Adapter)
+    // CHANNEL 2: FLIGHTSTICK & GENERIC HID INTERFACE
     // =========================================================================
-	
-	
-	
-
-        if (gpio_get(fireButtonPin) == 0) {
-            gp->steel_battalion_in_report.dButtons.MainWeapon = true;
-        }
+    else if (input_source == INPUT_SOURCE_JOYSTICK) {
+        if (pad_data->hat == 0) gp->steel_battalion_in_report.sightChangeY = -8000;
+        if (pad_data->hat == 4) gp->steel_battalion_in_report.sightChangeY = 8000;
+        
+        if (pad_data->buttons & (1 << 0)) gp->steel_battalion_in_report.dButtons.MainWeapon = true; 
+        if (pad_data->buttons & (1 << 1)) gp->steel_battalion_in_report.dButtons.Fire       = true; 
+        if (pad_data->buttons & (1 << 3)) gp->steel_battalion_in_report.dButtons.LockOn     = true; 
+    } 
+    // =========================================================================
+    // CHANNEL 3: CUSTOM DEVICE A
+    // =========================================================================
+    else if (input_source == INPUT_SOURCE_A) {
 		
+        gp->steel_battalion_in_report.dButtons.MainWeapon = is_mouse_pressed(MOUSE_BUTTON_LEFT);
+		//gp->steel_battalion_in_report.dButtons.LockOn     = is_mouse_pressed(MOUSE_BUTTON_LEFT); 
+        // Example: Scale a secondary high-DPI mouse to operate specialized weapons
+        // accumulated_aim_x += (local_mouse_x * (MOUSE_SENSITIVITY / 2));
+        // gp->steel_battalion_in_report.aimingX = (uint16_t)accumulated_aim_x;
+    }
+    // =========================================================================
+    // CHANNEL 4: CUSTOM DEVICE B
+    // =========================================================================
+    else if (input_source == INPUT_SOURCE_B) {
 		
-		
-    } */
-	        else if(gpio_get(fireButtonPin) == 0) {
-            gp->steel_battalion_in_report.dButtons.MainWeapon = true;
-        }
-	
+		gp->steel_battalion_in_report.dButtons.LockOn     = is_mouse_pressed(MOUSE_BUTTON_LEFT); 
 
-	
-	
-	
-}//end of apply inputs
+        // Example: Map discrete keycodes from a secondary keyboard matrix straight to toggles
+        // if (is_key_pressed(KEY_F1)) gp->steel_battalion_in_report.dButtons.ToggleFiltControl = true;
+    }
+}//end of apply_inputs_to_steel_battalion
 
+//go over the specifics of this
 void core1_usb_host_entry(void) {
     sleep_ms(10);
     static pio_usb_configuration_t pio_cfg = PIO_USB_DEFAULT_CONFIG;
@@ -428,6 +506,8 @@ void core1_usb_host_entry(void) {
     }
 }
 
+
+//unique flashing LED test for troubleshooting
 void test_led(void) {
     for (int i = 0; i < 3; i++) {
         gpio_put(PICO_LED_PIN, 1); sleep_ms(40);
@@ -435,6 +515,8 @@ void test_led(void) {
     }
 }
 
+
+//find out if this necessary
 void pack_steel_battalion_report(uint8_t *out_buf, Gamepad *gp) {
     // Clear out transmission container and assign tracking headers
     memset(out_buf, 0, 26);
@@ -521,6 +603,13 @@ void pack_steel_battalion_report(uint8_t *out_buf, Gamepad *gp) {
 }// end of pack steel battalion
 
 
+//Find out if this is necessary
+// Force this array structure into your Core 0 device descriptor configuration:
+const uint8_t sbc_xid_descriptor[] = {
+    0x10, 0x42, 0x00, 0x01, 0x01, 0x02, 0x00, 0x06, 
+    0x5E, 0x04, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00
+};
+
 
 // Custom app driver hook mapping table
 usbh_class_driver_t const* usbh_app_driver_get_cb(uint8_t* driver_count)
@@ -541,11 +630,7 @@ usbh_class_driver_t const* usbh_app_driver_get_cb(uint8_t* driver_count)
 }
 
 
-// Force this array structure into your Core 0 device descriptor configuration:
-const uint8_t sbc_xid_descriptor[] = {
-    0x10, 0x42, 0x00, 0x01, 0x01, 0x02, 0x00, 0x06, 
-    0x5E, 0x04, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00
-};
+
 
 
 bool tud_control_xfer_cb(uint8_t rhport, uint8_t stage, tusb_control_request_t const * request) 

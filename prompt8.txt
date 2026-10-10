@@ -1,0 +1,44 @@
+Project Context: Dual-core RP2040 Original Xbox Steel Battalion controller adapter project. We have completed a major structural rewrite of main.c, transitioning to a zero-allocation, type-first processing model. We eliminated the route_and_parse_gamepad layer for secondary inputs. Now, Core 0 intercepts raw USB HID reports and dumps them straight into structural slots as unparsed byte streams.Current Implementation State:combine_sb_inputs has been expanded to support three simultaneous Steel Battalion control panels (native or emulated clones). It resolves overlapping button maps with bitwise OR operations and determines analog joystick/pedal dominance using cascading non-neutral boundary checks.main() maintains sequential sbc_addr tracking slots for the three physical controllers alongside four generic raw HidDeviceSlot_t structures.apply_inputs_to_steel_battalion now implements a strict Type-First Triage Matrix. It breaks execution into individual protocol pathways (HID_TYPE_KEYBOARD, HID_TYPE_MOUSE, HID_TYPE_GAMEPAD) before executing specialized internal adjustments based on hardcoded vendor VID/PID filters.Goals for next session:Map standard unmounted callback filters inside usb_host_callbacks.c (tuh_hid_umount_cb and tuh_sbc_umount_cb) to clear is_connected states and reset slot addresses when hardware is unplugged.Refine high-DPI mouse scaling and mouse acceleration algorithms inside the HID_TYPE_MOUSE pipeline.Establish a standard structural parsing framework for additional flightsticks (e.g., Hori PS3/PS4 Flightstick) working directly out of the raw buffer slots.
+
+
+
+
+### Next Session Continuation Prompt
+
+Copy and paste the text block below into our next session to immediately resume development with full architectural context:
+
+================================================================================
+PROJECT: Dual-Core RP2040 Original Xbox Steel Battalion Controller Adapter
+================================================================================
+
+CONTEXT:
+We have completed a major structural rewrite of 'main.c', transitioning to a 
+zero-allocation, type-first processing model. We eliminated the old 
+'route_and_parse_gamepad' abstraction layer for secondary inputs. Core 0 now 
+intercepts raw USB HID reports from Core 1 and dumps them directly into fixed 
+structural slots as unparsed byte streams.
+
+CURRENT IMPLEMENTATION STATE:
+* 'combine_sb_inputs' has been expanded to support up to THREE simultaneous native 
+  or emulated Steel Battalion control panels. It resolves overlapping buttons 
+  via bitwise OR operations and determines analog joystick/pedal dominance 
+  using cascading non-neutral boundary checks.
+* The main execution loop maintains sequential 'sbc_addr' tracking variables 
+  for the three physical controllers alongside four generic raw 'HidDeviceSlot_t' 
+  array structures.
+* 'apply_inputs_to_steel_battalion' implements a strict Type-First Triage Matrix. 
+  It partitions execution branches into fixed protocol pathways (KEYBOARD, MOUSE, 
+  GAMEPAD) before performing hyper-specific coordinate transformations based on 
+  hardcoded vendor 'VID/PID' filters.
+
+GOALS FOR NEXT SESSION:
+1. Map standard unmounted callback filters inside 'usb_host_callbacks.c' 
+   ('tuh_hid_umount_cb' and 'tuh_sbc_umount_cb') to clear 'is_connected' states 
+   and reset slot addresses when hardware is physically unplugged.
+2. Refine high-DPI mouse scaling and relative movement accumulation algorithms 
+   directly inside the 'HID_TYPE_MOUSE' triage pipeline branch.
+3. Establish structured parsing frameworks for additional commercial flightsticks 
+   (e.g., Hori PS3/PS4 Flightstick) working straight out of the raw buffer slots.
+
+TIMESTAMP: 2026-09-27 21:45:15
+================================================================================

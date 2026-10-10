@@ -1,0 +1,429 @@
+parallel main
+
+#define CFG_TUH_ENABLED 1
+#include "tusb.h"
+#include "host/usbh_pvt.h" 
+
+#include "class/sbc/sbc_host.h"
+#include "device_profiles.h"
+#include "tusb_gamepad.h"  
+#include "input_mapping.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+
+#include "pico/stdlib.h"
+#include "pico/multicore.h" 
+#include "hardware/gpio.h"    
+#include "hardware/clocks.h" 
+#include "pico/util/queue.h" 
+
+#include "pio_usb.h"        
+
+#include "hid_kbm.h"
+#include "hid_gamepad.h"
+#include "neopixel.h"
+#include "usb_host_callbacks.h"
+
+#define HOST_PIN_DP 0 
+#define PICO_LED_PIN 25 
+#define QUEUE_DEPTH 8
+#define MOUSE_SENSITIVITY 45
+#define fireButtonPin 15
+
+// Mouse delta tracking spaces shared across processing contexts
+int32_t accumulated_aim_x = 32767;
+int32_t accumulated_aim_y = 32767;
+int t = 0; 
+
+// Input Data Routing Enums matching your clean architecture
+typedef enum {
+    HID_TYPE_NONE = 0,
+    HID_TYPE_GAMEPAD,
+    HID_TYPE_KEYBOARD,
+    HID_TYPE_MOUSE
+} HidProtocolType_t;
+
+#define MAX_HID_REPORT_LEN 64
+
+// Concrete tracked structural slots for raw buffers
+typedef struct {
+    uint16_t vid;
+    uint16_t pid;
+    bool is_connected;
+    uint8_t dev_addr;
+    HidProtocolType_t type;
+    uint8_t report_buf[MAX_HID_REPORT_LEN];
+    uint16_t report_len;
+} HidDeviceSlot_t;
+
+queue_t gamepad_packet_queue;
+bool led_feedback_enable = true;
+volatile sbc_leds_t cockpit_led_registry = {0};
+
+// Forward Declarations updating your processing flow
+local_sbc_data_t combine_sb_inputs(local_sbc_data_t const* dev_a, local_sbc_data_t const* dev_b, local_sbc_data_t const* dev_c);
+void apply_inputs_to_steel_battalion(Gamepad *gp, local_sbc_data_t const* sbc_data, 
+                                     HidDeviceSlot_t const* hid0, HidDeviceSlot_t const* hid1, 
+                                     HidDeviceSlot_t const* hid2, HidDeviceSlot_t const* hid3);
+void test_led(void);									 
+void core1_usb_host_entry(void);
+void pack_steel_battalion_report(uint8_t *out_buf, Gamepad *gp);
+int main(void) {
+    set_sys_clock_khz(120000, true);
+    sleep_ms(10); 
+    stdio_init_all();
+    
+    neopixel_init();
+    neopixel_set_color(20, 20, 20);	
+	
+    queue_init(&gamepad_packet_queue, sizeof(usb_packet_t), QUEUE_DEPTH);
+
+    gpio_init(PICO_LED_PIN);
+    gpio_set_dir(PICO_LED_PIN, GPIO_OUT);
+    gpio_set_pulls(HOST_PIN_DP, false, true);     
+    gpio_set_pulls(HOST_PIN_DP + 1, false, true); 
+	
+    gpio_init(fireButtonPin);
+    gpio_set_dir(fireButtonPin, GPIO_IN);
+    gpio_pull_up(fireButtonPin); 
+
+    init_tusb_gamepad(INPUT_MODE_XBOXORIGINAL);
+    multicore_reset_core1();
+    multicore_launch_core1(core1_usb_host_entry);
+	
+    tusb_rhport_init_t const device_init_config = {.role = TUSB_ROLE_DEVICE};
+    tusb_init(0, &device_init_config);
+
+    Gamepad *gp = gamepad(0);
+    usb_packet_t pkt;
+	
+    // Explicit allocations for the modified slots
+    HidDeviceSlot_t hid_slots[4];
+    memset(hid_slots, 0, sizeof(hid_slots));
+
+    local_sbc_data_t sbc_dev1 = {0}, sbc_dev2 = {0}, sbc_dev3 = {0};
+    uint8_t sbc_addr1 = 0, sbc_addr2 = 0, sbc_addr3 = 0;
+    bool sbc_act1 = false, sbc_act2 = false, sbc_act3 = false;
+
+    while (1) {
+        // STEP 1: HOISTED RESET MATRIX (Keeps your precise local tracking structures intact)
+        local_modifiers     = global_modifiers;
+        for (int i = 0; i < 6; i++) local_keycodes[i] = global_keycodes[i];
+        local_mouse_buttons = global_mouse_buttons;
+        local_mouse_x       = global_mouse_x;
+        local_mouse_y       = global_mouse_y;
+        local_mouse_wheel   = global_mouse_wheel;
+
+        global_mouse_x = 0; 
+        global_mouse_y = 0; 
+        global_mouse_wheel = 0;
+
+        bool state_has_changed = false;
+
+        // STEP 2: CROSS-CORE PAYLOAD RETRIEVAL & ADAPTIVE STORAGE
+        if (queue_try_remove(&gamepad_packet_queue, &pkt)) {
+            uint16_t dev_vid = 0, dev_pid = 0;
+            if (pkt.dev_addr != 0) {
+                tuh_vid_pid_get(pkt.dev_addr, &dev_vid, &dev_pid);
+            }
+
+            // A. Handle Multiple Native Steel Battalion Consoles
+            if (pkt.usage_id == 0x80) {
+                local_sbc_data_t const* incoming_frame = (local_sbc_data_t const*)pkt.report;
+
+                if (!sbc_act1 || sbc_addr1 == pkt.dev_addr) {
+                    sbc_addr1 = pkt.dev_addr;
+                    memcpy(&sbc_dev1, incoming_frame, sizeof(local_sbc_data_t));
+                    sbc_act1 = true;
+                } else if (!sbc_act2 || sbc_addr2 == pkt.dev_addr) {
+                    sbc_addr2 = pkt.dev_addr;
+                    memcpy(&sbc_dev2, incoming_frame, sizeof(local_sbc_data_t));
+                    sbc_act2 = true;
+                } else if (!sbc_act3 || sbc_addr3 == pkt.dev_addr) {
+                    sbc_addr3 = pkt.dev_addr;
+                    memcpy(&sbc_dev3, incoming_frame, sizeof(local_sbc_data_t));
+                    sbc_act3 = true;
+                }
+                state_has_changed = true;
+            }
+            // B. Handle Raw Input Streams Passthrough into Slots
+            else {
+                int target_slot = -1;
+                for (int i = 0; i < 4; i++) {
+                    if (hid_slots[i].is_connected && hid_slots[i].dev_addr == pkt.dev_addr) {
+                        target_slot = i;
+                        break;
+                    }
+                }
+                if (target_slot == -1) {
+                    for (int i = 0; i < 4; i++) {
+                        if (!hid_slots[i].is_connected) {
+                            target_slot = i;
+                            hid_slots[i].dev_addr = pkt.dev_addr;
+                            hid_slots[i].vid = dev_vid;
+                            hid_slots[i].pid = dev_pid;
+                            hid_slots[i].is_connected = true;
+
+                            if (pkt.usage_id == HID_ITF_PROTOCOL_KEYBOARD) hid_slots[i].type = HID_TYPE_KEYBOARD;
+                            else if (pkt.usage_id == HID_ITF_PROTOCOL_MOUSE) hid_slots[i].type = HID_TYPE_MOUSE;
+                            else hid_slots[i].type = HID_TYPE_GAMEPAD;
+                            break;
+                        }
+                    }
+                }
+                if (target_slot != -1) {
+                    uint16_t copy_bytes = (pkt.len > MAX_HID_REPORT_LEN) ? MAX_HID_REPORT_LEN : pkt.len;
+                    memcpy(hid_slots[target_slot].report_buf, pkt.report, copy_bytes);
+                    hid_slots[target_slot].report_len = copy_bytes;
+                    state_has_changed = true;
+                }
+            }
+        }
+
+        // STEP 3: PHYSICAL INTERRUPT SIGNALING MONITOR
+        bool key_active = false;
+        for (int i = 0; i < 6; i++) { if (local_keycodes[i] != 0) { key_active = true; break; } }
+        bool mouse_active = (local_mouse_buttons != 0 || local_mouse_x != 0 || local_mouse_y != 0 || local_mouse_wheel != 0);
+        bool gpio_active = (gpio_get(fireButtonPin) == 0);
+		
+        if (key_active || local_modifiers != 0 || mouse_active || gpio_active || sbc_act1) {
+            gpio_put(PICO_LED_PIN, 1);
+            if (mouse_active || key_active || gpio_active) {
+                state_has_changed = true;
+            }
+        } else {
+            gpio_put(PICO_LED_PIN, 0);
+        }
+
+        // STEP 4: RESOLVE SIMULTANEOUS MATRIX OVERLAYS
+        if (state_has_changed) {
+            local_sbc_data_t final_sbc_input = {0};
+            final_sbc_input.aimingX = 32767;
+            final_sbc_input.aimingY = 32767;
+
+            if (sbc_act1 || sbc_act2 || sbc_act3) {
+                final_sbc_input = combine_sb_inputs(
+                    sbc_act1 ? &sbc_dev1 : NULL,
+                    sbc_act2 ? &sbc_dev2 : NULL,
+                    sbc_act3 ? &sbc_dev3 : NULL
+                );
+            }
+
+            apply_inputs_to_steel_battalion(gp, &final_sbc_input, &hid_slots[0], &hid_slots[1], &hid_slots[2], &hid_slots[3]);
+        }
+
+        tusb_gamepad_task();
+        tud_task();
+    }
+    return 0;
+}
+local_sbc_data_t combine_sb_inputs(
+    local_sbc_data_t const* dev_a, 
+    local_sbc_data_t const* dev_b, 
+    local_sbc_data_t const* dev_c) 
+{
+    local_sbc_data_t combined = {0};
+    
+    if (dev_a != NULL) {
+        combined.bLength = dev_a->bLength;
+        combined.zero    = dev_a->zero;
+    }
+
+    // 1. Bitwise OR digital button matrices across all three target devices
+    uint16_t w0_a = (dev_a != NULL) ? dev_a->buttons[0] : 0;
+    uint16_t w0_b = (dev_b != NULL) ? dev_b->buttons[0] : 0;
+    uint16_t w0_c = (dev_c != NULL) ? dev_c->buttons[0] : 0;
+    combined.buttons[0] = w0_a | w0_b | w0_c;
+
+    uint16_t w1_a = (dev_a != NULL) ? dev_a->buttons[1] : 0;
+    uint16_t w1_b = (dev_b != NULL) ? dev_b->buttons[1] : 0;
+    uint16_t w1_c = (dev_c != NULL) ? dev_c->buttons[1] : 0;
+    combined.buttons[1] = w1_a | w1_b | w1_c;
+
+    uint16_t w2_a = (dev_a != NULL) ? dev_a->buttons[2] : 0;
+    uint16_t w2_b = (dev_b != NULL) ? dev_b->buttons[2] : 0;
+    uint16_t w2_c = (dev_c != NULL) ? dev_c->buttons[2] : 0;
+    combined.buttons[2] = w2_a | w2_b | w2_c;
+
+    // Helper thresholds macros to cleanly match off-center values across three streams
+    #define CHOOSE_AXIS(a, b, c, neutral) \
+        ((c != NULL && c->aimingX != neutral) ? c->aimingX : ((b != NULL && b->aimingX != neutral) ? b->aimingX : ((a != NULL) ? a->aimingX : neutral)))
+    #define CHOOSE_AXIS_Y(a, b, c, neutral) \
+        ((c != NULL && c->aimingY != neutral) ? c->aimingY : ((b != NULL && b->aimingY != neutral) ? b->aimingY : ((a != NULL) ? a->aimingY : neutral)))
+    #define CHOOSE_LEVER(a, b, c) \
+        ((c != NULL && c->turningLever != 0) ? c->turningLever : ((b != NULL && b->turningLever != 0) ? b->turningLever : ((a != NULL) ? a->turningLever : 0)))
+    #define CHOOSE_SIGHT_X(a, b, c) \
+        ((c != NULL && c->sightChangeX != 0) ? c->sightChangeX : ((b != NULL && b->sightChangeX != 0) ? b->sightChangeX : ((a != NULL) ? a->sightChangeX : 0)))
+    #define CHOOSE_SIGHT_Y(a, b, c) \
+        ((c != NULL && c->sightChangeY != 0) ? c->sightChangeY : ((b != NULL && b->sightChangeY != 0) ? b->sightChangeY : ((a != NULL) ? a->sightChangeY : 0)))
+    #define CHOOSE_PEDAL(pa, pb, pc) \
+        ((pc != 0) ? pc : ((pb != 0) ? pb : ((pa != 0) ? pa : 0)))
+
+    combined.aimingX       = CHOOSE_AXIS(dev_a, dev_b, dev_c, 32767);
+    combined.aimingY       = CHOOSE_AXIS_Y(dev_a, dev_b, dev_c, 32767);
+    combined.turningLever  = CHOOSE_LEVER(dev_a, dev_b, dev_c);
+    combined.sightChangeX  = CHOOSE_SIGHT_X(dev_a, dev_b, dev_c);
+    combined.sightChangeY  = CHOOSE_SIGHT_Y(dev_a, dev_b, dev_c);
+
+    combined.slidePedal    = CHOOSE_PEDAL((dev_a ? dev_a->slidePedal : 0), (dev_b ? dev_b->slidePedal : 0), (dev_c ? dev_c->slidePedal : 0));
+    combined.brakePedal    = CHOOSE_PEDAL((dev_a ? dev_a->brakePedal : 0), (dev_b ? dev_b->brakePedal : 0), (dev_c ? dev_c->brakePedal : 0));
+    combined.accelPedal    = CHOOSE_PEDAL((dev_a ? dev_a->accelPedal : 0), (dev_b ? dev_b->accelPedal : 0), (dev_c ? dev_c->accelPedal : 0));
+
+    combined.tuner         = CHOOSE_PEDAL((dev_a ? dev_a->tuner : 0), (dev_b ? dev_b->tuner : 0), (dev_c ? dev_c->tuner : 0));
+    combined.shifter       = CHOOSE_PEDAL((dev_a ? dev_a->shifter : 0), (dev_b ? dev_b->shifter : 0), (dev_c ? dev_c->shifter : 0));
+
+    #undef CHOOSE_AXIS
+    #undef CHOOSE_AXIS_Y
+    #undef CHOOSE_LEVER
+    #undef CHOOSE_SIGHT_X
+    #undef CHOOSE_SIGHT_Y
+    #undef CHOOSE_PEDAL
+
+    return combined;
+}
+void apply_inputs_to_steel_battalion(
+    Gamepad *gp, 
+    local_sbc_data_t const* sbc_data, 
+    HidDeviceSlot_t const* hid0,
+    HidDeviceSlot_t const* hid1,
+    HidDeviceSlot_t const* hid2,
+    HidDeviceSlot_t const* hid3) 
+{
+    memset(&gp->steel_battalion_in_report.dButtons, 0, sizeof(gp->steel_battalion_in_report.dButtons));
+	
+    if (gpio_get(fireButtonPin) == 0) {
+        gp->steel_battalion_in_report.dButtons.MainWeapon = true;
+    }
+
+    if (sbc_data != NULL) {
+        uint16_t w0 = sbc_data->buttons[0]; uint16_t w1 = sbc_data->buttons[1]; uint16_t w2 = sbc_data->buttons[2];
+		
+        gp->steel_battalion_in_report.gearLever     = sbc_data->shifter;		
+        gp->steel_battalion_in_report.tunerDial     = sbc_data->tuner;
+
+        gp->steel_battalion_in_report.dButtons.MainWeapon   = (w0 & (1 << 0)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Fire         = (w0 & (1 << 1)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.LockOn       = (w0 & (1 << 2)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Eject        = (w0 & (1 << 3)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.CockpitHatch = (w0 & (1 << 4)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Ignition     = (w0 & (1 << 5)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Start        = (w0 & (1 << 6)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.MultiMonitorOpenClose    = (w0 & (1 << 7)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.MultiMonitorMapZoomInOut = (w0 & (1 << 8)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.MultiMonitorModeSelect   = (w0 & (1 << 9)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.MultiMonitorSubMonitor   = (w0 & (1 << 10)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.MainMonitorZoomIn        = (w0 & (1 << 11)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.MainMonitorZoomOut       = (w0 & (1 << 12)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ForecastShootingSystem  = (w0 & (1 << 13)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Manipulator           = (w0 & (1 << 14)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.LineColorChange       = (w0 & (1 << 15)) ? true : false;
+
+        gp->steel_battalion_in_report.dButtons.Washing              = (w1 & (1 << 0)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Extinguisher         = (w1 & (1 << 1)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Chaff                = (w1 & (1 << 2)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.TankDetach           = (w1 & (1 << 3)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Override             = (w1 & (1 << 4)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.NightScope           = (w1 & (1 << 5)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Function1            = (w1 & (1 << 6)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Function2            = (w1 & (1 << 7)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Function3            = (w1 & (1 << 8)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.WeaponConMain        = (w1 & (1 << 9)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.WeaponConSub         = (w1 & (1 << 10)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.WeaponConMagazine    = (w1 & (1 << 11)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Comm1                = (w1 & (1 << 12)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Comm2                = (w1 & (1 << 13)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Comm3                = (w1 & (1 << 14)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.Comm4                = (w1 & (1 << 15)) ? true : false;
+
+        gp->steel_battalion_in_report.dButtons.Comm5                = (w2 & (1 << 0)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.SightChange          = (w2 & (1 << 1)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleFiltControl    = (w2 & (1 << 2)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleOxygenSupply   = (w2 & (1 << 3)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleFuelFlowRate   = (w2 & (1 << 4)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleBufferMaterial = (w2 & (1 << 5)) ? true : false;
+        gp->steel_battalion_in_report.dButtons.ToggleVTLocation     = (w2 & (1 << 6)) ? true : false;
+
+        gp->steel_battalion_in_report.aimingX       = sbc_data->aimingX;
+        gp->steel_battalion_in_report.aimingY       = sbc_data->aimingY;
+        gp->steel_battalion_in_report.rotationLever = sbc_data->turningLever;
+        gp->steel_battalion_in_report.sightChangeX  = sbc_data->sightChangeX;
+        gp->steel_battalion_in_report.sightChangeY  = sbc_data->sightChangeY;
+        
+        gp->steel_battalion_in_report.leftPedal     = sbc_data->slidePedal;
+        gp->steel_battalion_in_report.middlePedal   = sbc_data->brakePedal;
+        gp->steel_battalion_in_report.rightPedal    = sbc_data->accelPedal;
+    }
+
+    HidDeviceSlot_t const* slots[4] = { hid0, hid1, hid2, hid3 };
+
+    for (int i = 0; i < 4; i++) {
+        if (slots[i] == NULL || !slots[i]->is_connected) continue;
+
+        uint8_t const* buf = slots[i]->report_buf;
+        uint16_t len       = slots[i]->report_len;
+        uint16_t vid       = slots[i]->vid;
+        uint16_t pid       = slots[i]->pid;
+
+        // ==========================================
+        // TYPE BLOCK A: KEYBOARD PARSING PIPELINE
+        // ==========================================
+        if (slots[i]->type == HID_TYPE_KEYBOARD) {
+            for (int k = 2; k < 8; k++) {
+                if (buf[k] == 0x04) gp->steel_battalion_in_report.rotationLever = -32768; // 'A'
+                if (buf[k] == 0x07) gp->steel_battalion_in_report.rotationLever = 32767;  // 'D'
+                if (buf[k] == 0x2C) gp->steel_battalion_in_report.dButtons.Eject = true;  // Space
+            }
+            if (vid == 0x413C && pid == 0x301A) {
+                // Dell custom matrix adjustments could go here
+            }
+        }
+        // ==========================================
+        // TYPE BLOCK B: MOUSE PARSING PIPELINE
+        // ==========================================
+        else if (slots[i]->type == HID_TYPE_MOUSE) {
+            uint8_t click_mask = buf[0];
+            int8_t delta_x     = (int8_t)buf[1];
+            int8_t delta_y     = (int8_t)buf[2];
+
+            if (click_mask & 0x01) gp->steel_battalion_in_report.dButtons.MainWeapon = true;
+            if (click_mask & 0x02) gp->steel_battalion_in_report.dButtons.Fire = true;
+
+            accumulated_aim_x += (delta_x * MOUSE_SENSITIVITY);
+            accumulated_aim_y += (delta_y * MOUSE_SENSITIVITY);
+            
+            if (accumulated_aim_x > 65535) accumulated_aim_x = 65535;
+            if (accumulated_aim_x < 0)     accumulated_aim_x = 0;
+            if (accumulated_aim_y > 65535) accumulated_aim_y = 65535;
+            if (accumulated_aim_y < 0)     accumulated_aim_y = 0;
+
+            gp->steel_battalion_in_report.aimingX = (uint16_t)accumulated_aim_x;
+            gp->steel_battalion_in_report.aimingY = (uint16_t)accumulated_aim_y;
+
+            if (vid == 0x046D && pid == 0xC016) {
+                if (click_mask & 0x04) gp->steel_battalion_in_report.dButtons.LockOn = true;
+            }
+        }
+        // ==========================================
+        // TYPE BLOCK C: GAMEPAD / JOYSTICK PIPELINE
+        // ==========================================
+        else if (slots[i]->type == HID_TYPE_GAMEPAD) {
+            if (vid == 0x046D && pid == 0xC215) { // Logitech Extreme 3D Pro
+                uint16_t raw_x = buf[0] | ((buf[1] & 0x03) << 8);
+                uint16_t raw_y = ((buf[1] >> 2) | (buf[2] << 6)) & 0x3FF;
+                gp->steel_battalion_in_report.aimingX = (uint16_t)((raw_x * 65535) / 1023);
+                gp->steel_battalion_in_report.aimingY = (uint16_t)((raw_y * 65535) / 1023);
+                if (buf[3] & 0x01) gp->steel_battalion_in_report.dButtons.MainWeapon = true;
+                if (buf[3] & 0x02) gp->steel_battalion_in_report.dButtons.Fire = true;
+            }
+            else {
+                if (len >= 4) {
+                    if (buf[3] & 0x01) gp->steel_battalion_in_report.dButtons.MainWeapon = true;
+                }
+            }
+        }
+    }
+}
+
+// [Keep your existing core1_usb_host_entry, test_led, and pack_steel_battalion_report exactly as they are...]

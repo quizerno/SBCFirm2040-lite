@@ -4,6 +4,9 @@
 #include <stdint.h>
 
 #define NEOPIXEL_PIN 21
+//Default 21
+//23 if YD
+
 
 // Initializes the PIO state machine for the NeoPixel strip
 void neopixel_init(void);

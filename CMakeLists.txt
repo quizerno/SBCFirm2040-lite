@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.13)
 
 set(NAME steel_battalion_controller_fw)
 set(PICO_BOARD none)
+#set(PICO_BOARD vcc-gnd-yd-rp2040)
+
 
 add_compile_definitions(    PICO_BOOT_STAGE2_CHOOSE_GENERIC_03H=1 
     PICO_XOSC_STARTUP_DELAY_MULTIPLIER=64

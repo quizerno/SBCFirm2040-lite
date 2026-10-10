@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/avi/SBCFirm2040-lite/buildpico/CMakeFiles/picotoolBuild"
+		},
+		{
+			"file" : "/home/avi/SBCFirm2040-lite/buildpico/CMakeFiles/picotoolBuild.rule"
+		},
+		{
+			"file" : "/home/avi/SBCFirm2040-lite/buildpico/CMakeFiles/picotoolBuild-complete.rule"
+		},
+		{
+			"file" : "/home/avi/SBCFirm2040-lite/buildpico/picotool/src/picotoolBuild-stamp/picotoolBuild-build.rule"
+		},
+		{
+			"file" : "/home/avi/SBCFirm2040-lite/buildpico/picotool/src/picotoolBuild-stamp/picotoolBuild-configure.rule"
+		},
+		{
+			"file" : "/home/avi/SBCFirm2040-lite/buildpico/picotool/src/picotoolBuild-stamp/picotoolBuild-download.rule"
+		},
+		{
+			"file" : "/home/avi/SBCFirm2040-lite/buildpico/picotool/src/picotoolBuild-stamp/picotoolBuild-install.rule"
+		},
+		{
+			"file" : "/home/avi/SBCFirm2040-lite/buildpico/picotool/src/picotoolBuild-stamp/picotoolBuild-mkdir.rule"
+		},
+		{
+			"file" : "/home/avi/SBCFirm2040-lite/buildpico/picotool/src/picotoolBuild-stamp/picotoolBuild-patch.rule"
+		},
+		{
+			"file" : "/home/avi/SBCFirm2040-lite/buildpico/picotool/src/picotoolBuild-stamp/picotoolBuild-test.rule"
+		},
+		{
+			"file" : "/home/avi/SBCFirm2040-lite/buildpico/picotool/src/picotoolBuild-stamp/picotoolBuild-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"picotoolBuild"
+		],
+		"name" : "picotoolBuild"
+	}
+}

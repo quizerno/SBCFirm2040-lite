@@ -6,3 +6,47 @@ Here is where we left off:
 3. Current Block: We are debugging a structural alignment compilation error in '/lib/tinyusb/src/host/usbh.c' around line 325 where the custom '.init = sbch_init' driver registration hook is breaking. 
 
 Let's inspect 'usbh.c' around line 325 to fix the syntax error, and then check 'usb_host_callbacks.c' to cleanly map the new 16-bit button array and analog channels into 'main.c' or 'local_sbc_data'.
+
+
+
+Resume the dual-core RP2040 Original Xbox Steel Battalion controller adapter project. I am running into an issue where 2 or more devices are not having their inputs read at the same tie.
+
+In an effort to test this, I have two mouse devices that both have an input mapped to their left mouse button (one is assigned primary fire, the other is assigned lock-on), to differentiate between the two mouse buttons it uses an input_source identifier that is assigned based on the PID/VID of the device.
+
+but because I am reading one packet at a time, I hitting both left mouse buttons  does not show both inputs being pressed (in the game)
+
+
+
+
+
+
+Resume the dual-core RP2040 Original Xbox Steel Battalion controller adapter project. 
+
+Context: 
+- We diagnosed a state-wiping concurrency bug where interleaved multi-device USB packets (e.g., Device A and Device B left clicks) were overwriting each other because global button maps were being cleared inside the parsing logic loops.
+- We discussed implementing a persistent state retention model for independent input channels.
+- We decided to transition away from a boolean-per-input tracking strategy to a memory-efficient bitmask structure (`w0`, `w1`, `w2`) that supports multi-source merging via bitwise OR operations.
+- We analyzed the transmission gate to prevent collisions between `tusb_gamepad_task()` and manual `tud_hid_report` transmissions.
+
+Goal for this session:
+Implement the optimized code provided in our last snapshot to migrate the input system over to compact bitmasks, isolate individual source states, and implement clean aggregation logic.
+
+
+
+
+
+Resume the dual-core RP2040 Original Xbox Steel Battalion controller adapter project.
+
+Context:
+- We shifted away from persistent tracking inside complex channel structures to simplify the architecture.
+- We redesigned the program structure so that 'apply_inputs_to_steel_battalion' explicitly accepts fixed structural slots: the global Gamepad struct, a fixed array for multiple Steel Battalion devices (handling native/emulated duplicates identically via loops), and four generalized HID device parameters/slots.
+- We treat Keyboard/Mouse (KBM) configurations like standard joysticks, parsing their inputs directly into a uniform data structure at the main loop level to keep parameters consistent.
+
+Goal for this session:
+Cleanly define the new multi-device function signature for 'apply_inputs_to_steel_battalion' and integrate the array-loop architecture into the core layout translation routines.
+
+
+
+
+
+Project Context: Dual-core RP2040 Original Xbox Steel Battalion controller adapter project. We completed an architectural shift away from complex channel structures and dynamic loops. We implemented a flat, explicit signature model that passes a single unified Gamepad* output state, an aggregated local_sbc_data_t structural payload, and four explicit, statically declared pointers representing individual generalized HID device parameters (hid0 through hid3). The inputs from multiple physical Steel Battalion devices are now cleanly merged upstream via a stateless helper function (combine_sb_inputs) before passing to the translation pipeline.Current Implementation State:combine_sb_inputs merges button bitfields via a logical OR and resolves analog axis values on a threshold/dominance fallback system.apply_inputs_to_steel_battalion maps inputs deterministically based on hardcoded profile VID/PID lookups inside a flat iteration layout over the 4 dedicated HID variables.main() maintains explicit tracking slots for up to two physical Steel Battalion controllers and four generic HID devices based on inbound packet hardware addresses.Goal for next session: State the next target feature block (e.g., implementing disconnection hooks inside main() to clear active is_connected states, mapping real-time mouse/KBM delta accumulation into one of the four tracking structures, or refining the vendor-specific report packing).Saved: 2026-09-27 20:11:15

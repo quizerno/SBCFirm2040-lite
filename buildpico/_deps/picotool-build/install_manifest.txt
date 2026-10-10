@@ -1,0 +1,7 @@
+/home/avi/SBCFirm2040-lite/buildpico/_deps/picotool/picotool
+/home/avi/SBCFirm2040-lite/buildpico/_deps/picotool/picotoolTargets.cmake
+/home/avi/SBCFirm2040-lite/buildpico/_deps/picotool/picotoolTargets-release.cmake
+/home/avi/SBCFirm2040-lite/buildpico/_deps/picotool/picotoolConfig.cmake
+/home/avi/SBCFirm2040-lite/buildpico/_deps/picotool/picotoolConfigVersion.cmake
+/home/avi/SBCFirm2040-lite/buildpico/_deps/picotool/enc_bootloader.elf
+/home/avi/SBCFirm2040-lite/buildpico/_deps/picotool/enc_bootloader_mbedtls.elf

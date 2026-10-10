@@ -1,0 +1,14 @@
+# Target labels
+ picotoolBuild
+# Source files and their labels
+/home/avi/SBCFirm2040-lite/buildpico/CMakeFiles/picotoolBuild
+/home/avi/SBCFirm2040-lite/buildpico/CMakeFiles/picotoolBuild.rule
+/home/avi/SBCFirm2040-lite/buildpico/CMakeFiles/picotoolBuild-complete.rule
+/home/avi/SBCFirm2040-lite/buildpico/picotool/src/picotoolBuild-stamp/picotoolBuild-build.rule
+/home/avi/SBCFirm2040-lite/buildpico/picotool/src/picotoolBuild-stamp/picotoolBuild-configure.rule
+/home/avi/SBCFirm2040-lite/buildpico/picotool/src/picotoolBuild-stamp/picotoolBuild-download.rule
+/home/avi/SBCFirm2040-lite/buildpico/picotool/src/picotoolBuild-stamp/picotoolBuild-install.rule
+/home/avi/SBCFirm2040-lite/buildpico/picotool/src/picotoolBuild-stamp/picotoolBuild-mkdir.rule
+/home/avi/SBCFirm2040-lite/buildpico/picotool/src/picotoolBuild-stamp/picotoolBuild-patch.rule
+/home/avi/SBCFirm2040-lite/buildpico/picotool/src/picotoolBuild-stamp/picotoolBuild-test.rule
+/home/avi/SBCFirm2040-lite/buildpico/picotool/src/picotoolBuild-stamp/picotoolBuild-update.rule

@@ -1,0 +1,2 @@
+/home/avi/SBCFirm2040-lite/buildpico/_deps/picotool-build/enc_bootloader_mbedtls/CMakeFiles/edit_cache.dir
+/home/avi/SBCFirm2040-lite/buildpico/_deps/picotool-build/enc_bootloader_mbedtls/CMakeFiles/rebuild_cache.dir

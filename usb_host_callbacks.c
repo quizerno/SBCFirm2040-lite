@@ -208,6 +208,17 @@ void tuh_hid_report_received_cb(uint8_t dev_addr, uint8_t instance, uint8_t cons
         process_hid_keyboard(report, len);
     } 
     else if (usage == HID_ITF_PROTOCOL_MOUSE) {
+		
+		usb_packet_t mouse_pkt;
+        mouse_pkt.len = (len > 64) ? 64 : len;
+        mouse_pkt.usage_id = usage;
+        mouse_pkt.dev_addr = dev_addr;
+        memcpy(mouse_pkt.report, report, mouse_pkt.len);
+
+        // Safely push the frame over to Core 0's processing queue
+        queue_try_add(&gamepad_packet_queue, &mouse_pkt);
+		
+		
         process_hid_mouse(report, len);
     }
     // --- ADD THIS BLOCK TO PROCESS GENERIC JOYSTICKS/GAMEPADS ---

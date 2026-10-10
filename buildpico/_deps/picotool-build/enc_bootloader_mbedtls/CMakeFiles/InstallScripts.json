@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/avi/SBCFirm2040-lite/buildpico/_deps/picotool-build/enc_bootloader_mbedtls/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
