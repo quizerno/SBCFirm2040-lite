@@ -2,6 +2,29 @@
 Located [here](https://github.com/faha223/tusb_gamepad/blob/2fd4b6da389a8b1c3da55b9d0eaf2cd30979cd57/src/drivers/xboxog/xid/xid_steelbattalion.h).
 Struct [here.](https://github.com/faha223/tusb_gamepad/blob/2fd4b6da389a8b1c3da55b9d0eaf2cd30979cd57/src/Gamepad.h#L95)
 
+
+
+## Data Types
+
+**Digital**<br/>
+
+|Input|Data Type|Values|Notes
+|---|---|---|---|
+| Buttons|unsigned 16 bit integer (int16_t)|1 (ON), 0 (OFF)|| 
+| Toggle|unsigned 16 bit integer (int16_t)|1 (ON), 0 (OFF)|| 
+| Gear|signed 8 bit integer (int8_t)|7 to 13|
+| Tuner|signed 8 bit integer (int8_t)|0 to 15|
+
+**Analog**<br/>
+|Input|Data Type|Minimum Value|Max Value|Notes
+|---|---|---|---|---|
+| Left Joystick X-Axis|signed 16 bit integer (int16_t)|0x8000|0x7FFF| -32768 (INT16_MIN) and 32767 (INT16_MAX)
+| Sight Change Hat Stick X-Y Axis|signed 16 bit integer (int16_t)|0x8000|0x7FFF|-32768 (INT16_MIN) and 32767 (INT16_MAX)
+| Right Joystick X-Y Axis|unsigned 16 bit integer (uint16_t)|0x0000|0xFFFF|0 to 65,535
+| Pedals |unsigned 16 bit integer (uint16_t)|0x0000|0xFFFF|0 to 65,535
+
+
+
 **Buttons and Toggles**<br/>
 Values are TRUE or FALSE, 1 or 0.
 See binding notes for information on timing
